@@ -1,10 +1,28 @@
 services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: travaux_routiers
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   back-api:
     build: ./back-api
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=development
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=travaux_routiers
+      - DB_USER=user
+      - DB_PASSWORD=password
+    depends_on:
+      - db
 
   front:
     build: ./front
@@ -12,3 +30,6 @@ services:
       - "80:80"
     depends_on:
       - back-api
+
+volumes:
+  postgres_data:
