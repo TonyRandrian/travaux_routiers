@@ -1,0 +1,14 @@
+services:
+  back-api:
+    build: ./back-api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+
+  front:
+    build: ./front
+    ports:
+      - "80:80"
+    depends_on:
+      - back-api
