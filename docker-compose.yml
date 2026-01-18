@@ -31,5 +31,22 @@ services:
     depends_on:
       - back-api
 
+  tile-server:
+    image: overv/openstreetmap-tile-server:2.3.0
+    command: run
+    ports:
+      - "8080:80"
+    volumes:
+      - ./osm/region.osm.pbf:/data/region.osm.pbf
+      - osm_data:/data/database
+      - osm_tiles:/data/tiles
+    environment:
+      - THREADS=4
+      - OSM2PGSQL_EXTRA_ARGS=-C 512
+      - PBF_PATH=/data/region.osm.pbf
+    shm_size: 512m
+
 volumes:
   postgres_data:
+  osm_data:
+  osm_tiles:

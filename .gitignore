@@ -17,6 +17,7 @@ coverage-final.json
 
 # Backend
 /back-api/node_modules/
+/osm/region.osm.pbf
 
 # Env files
 .env
