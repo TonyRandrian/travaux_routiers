@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "YOUR_API_KEY",
@@ -14,5 +14,16 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Activer la persistance offline avec gestion d'erreur
+enableIndexedDbPersistence(db, {
+  synchronizeTabs: true
+}).catch((err) => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Persistance impossible: plusieurs onglets ouverts');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Persistance non supportée par ce navigateur');
+  }
+});
 
 export default app;

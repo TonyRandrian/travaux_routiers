@@ -43,8 +43,15 @@ export function AuthProvider({ children }) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
-    await setDoc(userDocRef, userData);
-    setUserProfile(userData);
+    
+    try {
+      await setDoc(userDocRef, userData);
+      setUserProfile(userData);
+    } catch (error) {
+      console.error('Erreur création profil Firestore:', error);
+      // En cas d'erreur, définir quand même le profil localement
+      setUserProfile(userData);
+    }
 
     return userCredential;
   }
@@ -98,25 +105,55 @@ export function AuthProvider({ children }) {
 
   // Récupérer le profil utilisateur depuis Firestore
   async function fetchUserProfile(uid) {
-    const userDocRef = doc(db, 'users', uid);
-    const userDoc = await getDoc(userDocRef);
-    if (userDoc.exists()) {
-      const data = userDoc.data();
-      setUserProfile(data);
-      return data;
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      const userDoc = await getDoc(userDocRef);
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        setUserProfile(data);
+        return data;
+      }
+      // Si le document n'existe pas, créer un profil par défaut
+      const defaultProfile = {
+        uid: uid,
+        email: auth.currentUser?.email || '',
+        displayName: auth.currentUser?.displayName || 'Utilisateur',
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(userDocRef, defaultProfile);
+      setUserProfile(defaultProfile);
+      return defaultProfile;
+    } catch (error) {
+      console.error('Erreur fetchUserProfile:', error);
+      // En cas d'erreur (offline, etc.), créer un profil temporaire
+      const tempProfile = {
+        uid: uid,
+        email: auth.currentUser?.email || '',
+        displayName: auth.currentUser?.displayName || 'Utilisateur',
+        role: 'user'
+      };
+      setUserProfile(tempProfile);
+      return tempProfile;
     }
-    return null;
   }
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      if (user) {
-        await fetchUserProfile(user.uid);
-      } else {
+      try {
+        setCurrentUser(user);
+        if (user) {
+          await fetchUserProfile(user.uid);
+        } else {
+          setUserProfile(null);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la récupération du profil:", error);
         setUserProfile(null);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return unsubscribe;
@@ -136,7 +173,22 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {loading ? (
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          height: '100vh',
+          backgroundColor: '#1a1a2e',
+          color: '#fff',
+          fontSize: '18px'
+        }}>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+            <p>Chargement...</p>
+          </div>
+        </div>
+      ) : children}
     </AuthContext.Provider>
   );
 }

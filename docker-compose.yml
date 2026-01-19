@@ -31,6 +31,8 @@ services:
     build: ./front
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    env_file:
+      - ./front/.env
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
