@@ -1,6 +1,6 @@
 const config = {
   api: {
-    baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:3000'
+    baseUrl: process.env.REACT_APP_API_URL || 'http://localhost:3001'
   },
   map: {
     tileServer: process.env.REACT_APP_TILE_SERVER_URL || 'http://localhost:8080/tile/{z}/{x}/{y}.png',
