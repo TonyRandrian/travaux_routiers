@@ -40,13 +40,23 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Travaux Routiers - Antananarivo</h1>
-        <p>Message du back: {message}</p>
-        <button onClick={testDB}>Tester DB</button>
-        <p>{dbMessage}</p>
+        <div className="header-info">
+          <div className="info-item">
+            <span className="label">Statut API:</span>
+            <span className="value">{message || 'Chargement...'}</span>
+          </div>
+          <div className="info-item">
+            <button onClick={testDB} className="test-button">Tester DB</button>
+            {dbMessage && <span className="db-status">{dbMessage}</span>}
+          </div>
+        </div>
       </header>
       
-      <main style={{ padding: '20px' }}>
-        <h2>Carte des travaux routiers</h2>
+      <main className="map-container">
+        <div className="map-header">
+          <h2>Carte des travaux routiers - Antananarivo</h2>
+          <p className="map-info">Centre: 18.8792°S, 47.5079°E | {markers.length} point(s) d'intérêt</p>
+        </div>
         <MapComponent 
           markers={markers}
           center={[-18.8792, 47.5079]}
