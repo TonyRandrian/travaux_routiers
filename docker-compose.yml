@@ -2,25 +2,25 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: travaux_routiers
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${DB_NAME:-travaux_routiers}
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
   back-api:
     build: ./back-api
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_NAME=travaux_routiers
-      - DB_USER=user
-      - DB_PASSWORD=password
+      - DB_NAME=${DB_NAME:-travaux_routiers}
+      - DB_USER=${DB_USER:-user}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
     volumes:
       - ./back-api:/app
       - /app/node_modules
@@ -30,10 +30,15 @@ services:
   front:
     build: ./front
     ports:
-      - "3001:3000"
+      - "${FRONTEND_PORT:-3001}:3000"
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      - REACT_APP_API_URL=http://localhost:${BACKEND_PORT:-3000}
+      - REACT_APP_TILE_SERVER_URL=http://localhost:${TILE_SERVER_PORT:-8080}/tile/{z}/{x}/{y}.png
+      - REACT_APP_MAP_CENTER_LAT=${MAP_CENTER_LAT:--18.8792}
+      - REACT_APP_MAP_CENTER_LNG=${MAP_CENTER_LNG:-47.5079}
+      - REACT_APP_MAP_ZOOM=${MAP_ZOOM:-13}
     volumes:
       - ./front:/app
       - /app/node_modules
@@ -44,7 +49,7 @@ services:
     image: overv/openstreetmap-tile-server:2.3.0
     command: run
     ports:
-      - "8080:80"
+      - "${TILE_SERVER_PORT:-8080}:80"
     volumes:
       - ./osm/region.osm.pbf:/data/region.osm.pbf
       - osm_data:/data/database

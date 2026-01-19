@@ -1,7 +1,8 @@
 import React from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
+import config from '../config/config';
 
 // Fix pour les icônes de marqueurs par défaut de Leaflet
 delete L.Icon.Default.prototype._getIconUrl;
@@ -21,9 +22,9 @@ const MapComponent = ({ markers = [], center = [-18.8792, 47.5079], zoom = 13 })
       >
         {/* Serveur de tuiles local (mode offline) */}
         <TileLayer
-          url="http://localhost:8080/tile/{z}/{x}/{y}.png"
+          url={config.map.tileServer}
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          maxZoom={19}
+          maxZoom={config.map.maxZoom}
         />
         
         {/* Fallback vers les tuiles en ligne si le serveur local n'est pas disponible */}
