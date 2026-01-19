@@ -1,5 +1,5 @@
-# Build stage
-FROM node:18-alpine as build
+# Development stage avec hot-reload
+FROM node:18-alpine
 
 WORKDIR /app
 
@@ -9,13 +9,7 @@ RUN npm install
 
 COPY . .
 
-RUN npm run build
+EXPOSE 3000
 
-# Production stage
-FROM nginx:alpine
-
-COPY --from=build /app/build /usr/share/nginx/html
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+# React dev server avec hot-reload
+CMD ["npm", "start"]

@@ -4,7 +4,11 @@
   "description": "Backend API for travaux routiers",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
   },
   "dependencies": {
     "cors": "^2.8.5",

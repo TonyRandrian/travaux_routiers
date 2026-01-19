@@ -10,4 +10,5 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["npm", "start"]
+# En dev, nodemon sera utilisé via docker-compose
+CMD ["npm", "run", "dev"]
