@@ -46,14 +46,9 @@
           </form>
 
           <div class="auth-links">
-            <ion-button fill="clear" size="small" @click="goToForgotPassword">
-              Mot de passe oublié ?
-            </ion-button>
-            <p>
-              Pas encore de compte ?
-              <ion-button fill="clear" size="small" class="highlight" @click="goToRegister">
-                S'inscrire
-              </ion-button>
+            <p class="web-hint">
+              <ion-icon name="information-circle-outline"></ion-icon>
+              Inscription et récupération de mot de passe disponibles sur le site web
             </p>
           </div>
         </div>
@@ -71,7 +66,8 @@ import {
   IonInput,
   IonLabel,
   IonButton,
-  IonSpinner
+  IonSpinner,
+  IonIcon
 } from '@ionic/vue';
 import { useAuthStore } from '@/stores/auth';
 
@@ -105,13 +101,7 @@ async function handleLogin() {
   }
 }
 
-function goToRegister() {
-  router.push('/register');
-}
 
-function goToForgotPassword() {
-  router.push('/forgot-password');
-}
 </script>
 
 <style scoped>
@@ -220,14 +210,21 @@ function goToForgotPassword() {
   text-align: center;
 }
 
-.auth-links p {
-  margin: 12px 0 0 0;
+.auth-links .web-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   color: #666;
-  font-size: 14px;
+  font-size: 13px;
+  padding: 12px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  margin: 0;
 }
 
-.auth-links .highlight {
-  --color: #FF9800;
-  font-weight: 600;
+.auth-links .web-hint ion-icon {
+  font-size: 18px;
+  color: #FF9800;
 }
 </style>

@@ -1,15 +1,13 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import {
-  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   updateProfile,
-  sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
 
@@ -24,10 +22,10 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => !!currentUser.value);
   const isBlocked = computed(() => userProfile.value?.bloque || false);
 
-  // Initialiser l'écouteur d'authentification
+  // Initialiser l ecouteur d authentification
   function initAuthListener() {
     if (!auth) {
-      console.warn('Firebase Auth non configuré');
+      console.warn('Firebase Auth non configure');
       loading.value = false;
       return;
     }
@@ -43,7 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
     });
   }
 
-  // Récupérer le profil utilisateur
+  // Recuperer le profil utilisateur
   async function fetchUserProfile(uid: string) {
     if (!db) return;
     try {
@@ -53,8 +51,8 @@ export const useAuthStore = defineStore('auth', () => {
       if (userDoc.exists()) {
         userProfile.value = userDoc.data() as User;
       } else {
-        // Créer un profil par défaut si inexistant
-        const defaultProfile: User = {
+        // Profil cree via le web, on utilise les infos de Firebase Auth
+        userProfile.value = {
           uid,
           email: currentUser.value?.email || '',
           displayName: currentUser.value?.displayName || 'Utilisateur',
@@ -63,41 +61,9 @@ export const useAuthStore = defineStore('auth', () => {
           bloque: false,
           createdAt: new Date().toISOString()
         };
-        await setDoc(userDocRef, defaultProfile);
-        userProfile.value = defaultProfile;
       }
     } catch (err) {
       console.error('Erreur fetchUserProfile:', err);
-    }
-  }
-
-  // Inscription
-  async function signup(email: string, password: string, displayName: string, phone?: string) {
-    try {
-      error.value = null;
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      await updateProfile(user, { displayName });
-
-      const userData: User = {
-        uid: user.uid,
-        email,
-        displayName,
-        phone: phone || '',
-        role: 'user',
-        tentatives: 0,
-        bloque: false,
-        createdAt: new Date().toISOString()
-      };
-
-      await setDoc(doc(db, 'users', user.uid), userData);
-      userProfile.value = userData;
-
-      return userCredential;
-    } catch (err: any) {
-      error.value = getErrorMessage(err.code);
-      throw err;
     }
   }
 
@@ -106,37 +72,36 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       error.value = null;
 
-      // Vérifier si l'utilisateur est bloqué avant de tenter la connexion
+      // Verifier si l utilisateur est bloque avant de tenter la connexion
       const usersQuery = await getDoc(doc(db, 'usersByEmail', email.toLowerCase()));
       if (usersQuery.exists()) {
         const userData = usersQuery.data();
         if (userData.bloque) {
-          error.value = 'Compte bloqué. Contactez un manager.';
-          throw new Error('Compte bloqué');
+          error.value = 'Compte bloque. Contactez un manager.';
+          throw new Error('Compte bloque');
         }
       }
 
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Réinitialiser les tentatives après connexion réussie
+      // Reinitialiser les tentatives apres connexion reussie
       const userDocRef = doc(db, 'users', userCredential.user.uid);
       await updateDoc(userDocRef, { tentatives: 0 });
 
       return userCredential;
     } catch (err: any) {
-      // Incrémenter les tentatives en cas d'échec
+      // Incrementer les tentatives en cas d echec
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         await incrementLoginAttempts(email);
       }
-      error.value = getErrorMessage(err.code);
+      error.value = error.value || getErrorMessage(err.code);
       throw err;
     }
   }
 
-  // Incrémenter les tentatives de connexion
+  // Incrementer les tentatives de connexion
   async function incrementLoginAttempts(email: string) {
     try {
-      // Chercher l'utilisateur par email dans Firestore
       const emailDocRef = doc(db, 'usersByEmail', email.toLowerCase());
       const emailDoc = await getDoc(emailDocRef);
 
@@ -154,7 +119,7 @@ export const useAuthStore = defineStore('auth', () => {
               tentatives: newTentatives,
               bloque: true
             });
-            error.value = `Compte bloqué après ${MAX_TENTATIVES} tentatives. Contactez un manager.`;
+            error.value = `Compte bloque apres ${MAX_TENTATIVES} tentatives. Contactez un manager.`;
           } else {
             await updateDoc(userDocRef, { tentatives: newTentatives });
             error.value = `Tentative ${newTentatives}/${MAX_TENTATIVES}. ${MAX_TENTATIVES - newTentatives} tentative(s) restante(s).`;
@@ -166,7 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Déconnexion
+  // Deconnexion
   async function logout() {
     try {
       await signOut(auth);
@@ -177,20 +142,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Réinitialisation du mot de passe
-  async function resetPassword(email: string) {
-    try {
-      error.value = null;
-      await sendPasswordResetEmail(auth, email);
-    } catch (err: any) {
-      error.value = getErrorMessage(err.code);
-      throw err;
-    }
-  }
-
-  // Mise à jour du profil
+  // Mise a jour du profil (displayName seulement cote mobile)
   async function updateUserProfile(updates: Partial<User>) {
-    if (!currentUser.value) throw new Error('Non connecté');
+    if (!currentUser.value) throw new Error('Non connecte');
 
     try {
       const userDocRef = doc(db, 'users', currentUser.value.uid);
@@ -211,22 +165,18 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Messages d'erreur en français
+  // Messages d erreur en francais
   function getErrorMessage(code: string): string {
     switch (code) {
       case 'auth/user-not-found':
-        return 'Aucun compte trouvé avec cet email';
+        return 'Aucun compte trouve avec cet email';
       case 'auth/wrong-password':
       case 'auth/invalid-credential':
         return 'Email ou mot de passe incorrect';
       case 'auth/invalid-email':
         return 'Email invalide';
-      case 'auth/email-already-in-use':
-        return 'Cet email est déjà utilisé';
-      case 'auth/weak-password':
-        return 'Le mot de passe doit contenir au moins 6 caractères';
       case 'auth/too-many-requests':
-        return 'Trop de tentatives. Réessayez plus tard.';
+        return 'Trop de tentatives. Reessayez plus tard.';
       default:
         return 'Une erreur est survenue';
     }
@@ -240,10 +190,8 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     isBlocked,
     initAuthListener,
-    signup,
     login,
     logout,
-    resetPassword,
     updateUserProfile,
     fetchUserProfile
   };
