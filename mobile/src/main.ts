@@ -28,9 +28,10 @@ import '@ionic/vue/css/display.css';
  * https://ionicframework.com/docs/theming/dark-mode
  */
 
+/* Désactivé - on gère notre propre thème */
 /* @import '@ionic/vue/css/palettes/dark.always.css'; */
 /* @import '@ionic/vue/css/palettes/dark.class.css'; */
-import '@ionic/vue/css/palettes/dark.system.css';
+/* import '@ionic/vue/css/palettes/dark.system.css'; */
 
 /* Theme variables */
 import './theme/variables.css';
@@ -45,11 +46,6 @@ const app = createApp(App)
   .use(pinia)
   .use(router);
 
-// Initialiser l'écouteur d'authentification
-import { useAuthStore } from './stores/auth';
-
 router.isReady().then(() => {
-  const authStore = useAuthStore();
-  authStore.initAuthListener();
   app.mount('#app');
 });

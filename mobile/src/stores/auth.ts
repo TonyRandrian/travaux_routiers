@@ -9,7 +9,7 @@ import {
   sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc, increment } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
 
@@ -18,7 +18,7 @@ const MAX_TENTATIVES = 3;
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<FirebaseUser | null>(null);
   const userProfile = ref<User | null>(null);
-  const loading = ref(true);
+  const loading = ref(false);
   const error = ref<string | null>(null);
 
   const isAuthenticated = computed(() => !!currentUser.value);
@@ -26,6 +26,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Initialiser l'écouteur d'authentification
   function initAuthListener() {
+    if (!auth) {
+      console.warn('Firebase Auth non configuré');
+      loading.value = false;
+      return;
+    }
+    loading.value = true;
     return onAuthStateChanged(auth, async (user) => {
       currentUser.value = user;
       if (user) {
@@ -39,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Récupérer le profil utilisateur
   async function fetchUserProfile(uid: string) {
+    if (!db) return;
     try {
       const userDocRef = doc(db, 'users', uid);
       const userDoc = await getDoc(userDocRef);

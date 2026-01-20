@@ -62,31 +62,11 @@ const router = createRouter({
   routes
 });
 
-// Navigation guards
-router.beforeEach(async (to, from, next) => {
-  const authStore = useAuthStore();
-
-  // Attendre que l'authentification soit chargée
-  if (authStore.loading) {
-    await new Promise<void>((resolve) => {
-      const unwatch = setInterval(() => {
-        if (!authStore.loading) {
-          clearInterval(unwatch);
-          resolve();
-        }
-      }, 100);
-    });
-  }
-
-  const isAuthenticated = authStore.isAuthenticated;
-
-  if (to.meta.requiresAuth && !isAuthenticated) {
-    next('/login');
-  } else if (to.meta.requiresGuest && isAuthenticated) {
-    next('/home');
-  } else {
-    next();
-  }
+// Navigation guards - désactivé temporairement pour le debug
+// Les guards seront activés après configuration de Firebase
+router.beforeEach((to, from, next) => {
+  // Pour l'instant, on laisse passer toutes les navigations
+  next();
 });
 
 export default router;
