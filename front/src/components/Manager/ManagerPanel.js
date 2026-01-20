@@ -391,6 +391,12 @@ const ManagerPanel = ({ onClose }) => {
             👥 Utilisateurs bloqués ({blockedUsers.length})
           </button>
           <button 
+            className={`tab ${activeTab === 'create-user' ? 'active' : ''}`}
+            onClick={() => setActiveTab('create-user')}
+          >
+            ➕ Créer utilisateur
+          </button>
+          <button 
             className={`tab ${activeTab === 'roles' ? 'active' : ''}`}
             onClick={() => setActiveTab('roles')}
           >
@@ -452,90 +458,104 @@ const ManagerPanel = ({ onClose }) => {
             </div>
           )}
 
+          {/* Onglet Créer Utilisateur */}
+          {activeTab === 'create-user' && (
+            <div className="create-user-section">
+              <h3>➕ Créer un nouvel utilisateur</h3>
+              <p className="section-description">
+                Créez un compte utilisateur pour l'application mobile. Les utilisateurs créés ici auront par défaut le rôle <strong>USER</strong> et pourront signaler des travaux routiers via l'application mobile.
+              </p>
+              
+              <div className="create-user-form standalone">
+                <form onSubmit={handleCreateUser}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Email *</label>
+                      <input
+                        type="email"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                        placeholder="utilisateur@example.com"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Mot de passe *</label>
+                      <input
+                        type="password"
+                        value={newUser.mot_de_passe}
+                        onChange={(e) => setNewUser({...newUser, mot_de_passe: e.target.value})}
+                        placeholder="Minimum 6 caractères"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Prénom</label>
+                      <input
+                        type="text"
+                        value={newUser.prenom}
+                        onChange={(e) => setNewUser({...newUser, prenom: e.target.value})}
+                        placeholder="Prénom de l'utilisateur"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Nom</label>
+                      <input
+                        type="text"
+                        value={newUser.nom}
+                        onChange={(e) => setNewUser({...newUser, nom: e.target.value})}
+                        placeholder="Nom de l'utilisateur"
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Rôle</label>
+                      <select
+                        value={newUser.role_code}
+                        onChange={(e) => setNewUser({...newUser, role_code: e.target.value})}
+                      >
+                        <option value="USER">Utilisateur (USER) - Application mobile</option>
+                        <option value="MANAGER">Manager (MANAGER) - Accès complet</option>
+                      </select>
+                      <small className="form-hint">
+                        USER = Application mobile uniquement | MANAGER = Accès web + mobile
+                      </small>
+                    </div>
+                  </div>
+                  <div className="form-actions-center">
+                    <button type="submit" className="create-btn large" disabled={loading}>
+                      {loading ? '⏳ Création en cours...' : '✓ Créer l\'utilisateur'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="created-users-info">
+                <h4>📋 Derniers utilisateurs créés</h4>
+                <p>Total : <strong>{allUsers.length}</strong> utilisateur(s) enregistré(s)</p>
+                <div className="recent-users">
+                  {allUsers.slice(-5).reverse().map(user => (
+                    <div key={user.id} className="recent-user-item">
+                      <span className={`role-badge ${user.role_code?.toLowerCase()}`}>{user.role_code}</span>
+                      <span className="user-email">{user.email}</span>
+                      <span className="user-name">{user.prenom} {user.nom}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Onglet Gestion des Rôles */}
           {activeTab === 'roles' && (
             <div className="roles-section">
               <div className="section-header">
                 <h3>Gestion des rôles utilisateurs</h3>
-                <button 
-                  className="create-user-btn"
-                  onClick={() => setShowCreateUser(!showCreateUser)}
-                >
-                  {showCreateUser ? '✕ Annuler' : '+ Créer un utilisateur'}
-                </button>
               </div>
-
-              {/* Formulaire de création d'utilisateur */}
-              {showCreateUser && (
-                <div className="create-user-form">
-                  <h4>Nouvel utilisateur</h4>
-                  <form onSubmit={handleCreateUser}>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Email *</label>
-                        <input
-                          type="email"
-                          value={newUser.email}
-                          onChange={(e) => setNewUser({...newUser, email: e.target.value})}
-                          placeholder="email@example.com"
-                          required
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Mot de passe *</label>
-                        <input
-                          type="password"
-                          value={newUser.mot_de_passe}
-                          onChange={(e) => setNewUser({...newUser, mot_de_passe: e.target.value})}
-                          placeholder="••••••••"
-                          required
-                          minLength={6}
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Prénom</label>
-                        <input
-                          type="text"
-                          value={newUser.prenom}
-                          onChange={(e) => setNewUser({...newUser, prenom: e.target.value})}
-                          placeholder="Prénom"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Nom</label>
-                        <input
-                          type="text"
-                          value={newUser.nom}
-                          onChange={(e) => setNewUser({...newUser, nom: e.target.value})}
-                          placeholder="Nom"
-                        />
-                      </div>
-                    </div>
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label>Rôle</label>
-                        <select
-                          value={newUser.role_code}
-                          onChange={(e) => setNewUser({...newUser, role_code: e.target.value})}
-                        >
-                          {roles.map(role => (
-                            <option key={role.id} value={role.code}>
-                              {role.libelle} ({role.code})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group form-actions">
-                        <button type="submit" className="save-btn" disabled={loading}>
-                          {loading ? 'Création...' : '✓ Créer l\'utilisateur'}
-                        </button>
-                      </div>
-                    </div>
-                  </form>
-                </div>
-              )}
 
               <div className="roles-legend">
                 <span className="role-tag visiteur">VISITEUR</span> - Consultation uniquement (pas de compte)
