@@ -72,25 +72,36 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       error.value = null;
 
-      // Verifier si l utilisateur est bloque avant de tenter la connexion
-      const usersQuery = await getDoc(doc(db, 'usersByEmail', email.toLowerCase()));
-      if (usersQuery.exists()) {
-        const userData = usersQuery.data();
-        if (userData.bloque) {
-          error.value = 'Compte bloque. Contactez un manager.';
-          throw new Error('Compte bloque');
+      // Vérifier si l'utilisateur est bloqué avant de tenter la connexion
+      try {
+        const usersQuery = await getDoc(doc(db, 'usersByEmail', email.toLowerCase()));
+        if (usersQuery.exists()) {
+          const userData = usersQuery.data();
+          if (userData.bloque) {
+            error.value = 'Compte bloqué après 3 tentatives. Contactez un manager.';
+            throw new Error('Compte bloqué');
+          }
         }
+      } catch (firestoreErr: any) {
+        // Ignorer les erreurs Firestore (permission denied, collection inexistante, etc.)
+        console.log('Vérification blocage ignorée:', firestoreErr.message);
       }
 
+      // Tenter la connexion Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Reinitialiser les tentatives apres connexion reussie
-      const userDocRef = doc(db, 'users', userCredential.user.uid);
-      await updateDoc(userDocRef, { tentatives: 0 });
+      // Réinitialiser les tentatives après connexion réussie
+      try {
+        const userDocRef = doc(db, 'users', userCredential.user.uid);
+        await updateDoc(userDocRef, { tentatives: 0 });
+      } catch (updateErr) {
+        // Ignorer si le document n'existe pas encore
+        console.log('Reset tentatives ignoré:', updateErr);
+      }
 
       return userCredential;
     } catch (err: any) {
-      // Incrementer les tentatives en cas d echec
+      // Incrémenter les tentatives en cas d'échec d'authentification
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
         await incrementLoginAttempts(email);
       }
@@ -165,31 +176,36 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // Messages d erreur en francais
+  // Messages d'erreur clairs en français
   function getErrorMessage(code: string): string {
     console.log('Code erreur Firebase:', code); // Debug
-    switch (code) {
-      case 'auth/user-not-found':
-        return 'Aucun compte trouvé avec cet email. Inscrivez-vous sur le site web.';
-      case 'auth/wrong-password':
-        return 'Mot de passe incorrect';
-      case 'auth/invalid-credential':
-        return 'Email ou mot de passe incorrect';
-      case 'auth/invalid-email':
-        return 'Format d\'email invalide';
-      case 'auth/user-disabled':
-        return 'Ce compte a été désactivé';
-      case 'auth/too-many-requests':
-        return 'Trop de tentatives. Réessayez dans quelques minutes.';
-      case 'auth/network-request-failed':
-        return 'Erreur réseau. Vérifiez votre connexion internet.';
-      case 'auth/operation-not-allowed':
-        return 'Connexion par email non activée. Contactez l\'administrateur.';
-      case undefined:
-        return 'Erreur de connexion. Vérifiez vos identifiants.';
+    
+    // Normaliser le code (enlever le préfixe si présent)
+    const normalizedCode = code?.replace('auth/', '') || '';
+    
+    switch (normalizedCode) {
+      case 'user-not-found':
+        return 'Aucun compte avec cet email. Créez un compte sur le site web.';
+      case 'wrong-password':
+        return 'Mot de passe incorrect.';
+      case 'invalid-credential':
+        return 'Email ou mot de passe incorrect.';
+      case 'invalid-email':
+        return 'Adresse email invalide.';
+      case 'user-disabled':
+        return 'Ce compte est désactivé. Contactez un manager.';
+      case 'too-many-requests':
+        return 'Trop de tentatives échouées. Attendez quelques minutes.';
+      case 'network-request-failed':
+        return 'Pas de connexion internet.';
+      case 'operation-not-allowed':
+        return 'Connexion non autorisée. Contactez l\'administrateur.';
       default:
+        if (!code || code === 'undefined') {
+          return 'Erreur de connexion. Vérifiez vos identifiants.';
+        }
         console.warn('Code erreur non géré:', code);
-        return `Erreur de connexion (${code || 'inconnue'})`;
+        return 'Email ou mot de passe incorrect.';
     }
   }
 
