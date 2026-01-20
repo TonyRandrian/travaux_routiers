@@ -1,0 +1,70 @@
+DOCUMENTATION TECHNIQUE
+Application Web - Travaux Routiers Antananarivo
+
+
+SCENARIOS D'UTILISATION
+
+
+Image 1 : Page de connexion
+
+Scenario : Authentification ou accès visiteur
+L'utilisateur arrive sur la page de connexion. Il peut se connecter avec email et mot de passe, ou choisir "Continuer en tant que visiteur" pour acceder a l'application en mode lecture seule.
+
+
+Image 2 : Carte - Vue globale (mode visiteur)
+
+Scenario : Visualisation de tous les signalements
+L'utilisateur accede a la carte interactive d'Antananarivo. Les signalements sont affiches avec des marqueurs colores selon leur statut : rouge (Nouveau), orange (En cours), vert (Termine). 
+
+
+Image 3 : Carte - Popup de details
+
+Scenario : Consultation rapide d'un signalement
+L'utilisateur clique sur un marqueur. Une popup affiche les informations essentielles : titre, date, statut, surface, budget et entreprise assignee. 
+
+
+Image 4 : Tableau recapitulatif
+
+Scenario : Vue d'ensemble des statistiques
+L'utilisateur consulte le tableau de bord affichant les statistiques globales.
+
+
+Image 5 : Page de connexion - Saisie utilisateur
+
+Scenario : Connexion d'un utilisateur manager
+Un manager saisit ses identifiants (manager@example.mg) pour se connecter. Apres authentification, il aura acces aux fonctionnalites d'administration : gestion des signalements, creation d'utilisateurs et synchronisation des donnees.
+
+
+Image 6 : Panel Manager - Utilisateurs bloques
+
+Scenario : Gestion des utilisateurs bloques
+Le manager accede au Panel Manager et consulte l'onglet "Utilisateurs bloques". Il peut voir la liste des utilisateurs ayant echoue plusieurs tentatives de connexion et les debloquer si necessaire.
+
+
+Image 7 : Panel Manager - Creation d'utilisateur
+
+Scenario : Ajout d'un nouvel utilisateur
+Le manager cree un nouveau compte utilisateur en remplissant le formulaire.
+
+
+Image 8 : Panel Manager - Liste des signalements
+
+Scenario : Gestion de tous les signalements
+Le manager consulte la liste complete de tous les signalements avec leurs details : titre, statut, surface, budget, entreprise et date. Il peut modifier chaque signalement via le bouton "Modifier".
+
+
+Image 9 : Panel Manager - Modification de signalement
+
+Scenario : Edition d'un signalement existant
+Le manager modifie les informations d'un signalement : titre, description, surface, budget, statut et entreprise assignee. Il peut enregistrer les modifications ou annuler.
+
+Image 10 : Carte - Vue des marqueurs
+
+Scenario : Navigation sur la carte avec zoom
+L'utilisateur navigue sur la carte d'Antananarivo. 
+
+Image 11 : Panel Manager - Synchronisation
+
+Scenario : Synchronisation Firebase - PostgreSQL
+Le manager accede a l'onglet Synchronisation pour synchroniser les donnees entre Firebase et PostgreSQL. 
+Test de syncho ici (ajout d'un signalement)

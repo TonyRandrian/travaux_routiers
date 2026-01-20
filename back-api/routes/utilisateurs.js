@@ -227,9 +227,8 @@ router.post('/create', authenticateToken, requireManager, async (req, res) => {
       return res.status(400).json({ error: 'Cet email est déjà utilisé' });
     }
     
-    // Hasher le mot de passe
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(mot_de_passe, salt);
+    // Stocker le mot de passe brut (non hashé)
+    // Note: En production, il est recommandé de hasher les mots de passe
     
     // Récupérer le rôle (par défaut USER si non spécifié)
     const roleToUse = role_code || 'USER';
@@ -240,7 +239,7 @@ router.post('/create', authenticateToken, requireManager, async (req, res) => {
       INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, email, nom, prenom, created_at
-    `, [email, hashedPassword, nom, prenom, id_role]);
+    `, [email, mot_de_passe, nom, prenom, id_role]);
     
     res.status(201).json({
       message: 'Utilisateur créé avec succès',
@@ -282,9 +281,8 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Cet email est déjà utilisé' });
     }
     
-    // Hasher le mot de passe
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(mot_de_passe, salt);
+    // Stocker le mot de passe brut (non hashé)
+    // Note: En production, il est recommandé de hasher les mots de passe
     
     // Récupérer le rôle USER par défaut
     const roleResult = await pool.query(`SELECT id FROM role WHERE code = 'USER'`);
@@ -294,7 +292,7 @@ router.post('/register', async (req, res) => {
       INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
       VALUES ($1, $2, $3, $4, $5)
       RETURNING id, email, nom, prenom, created_at
-    `, [email, hashedPassword, nom, prenom, id_role]);
+    `, [email, mot_de_passe, nom, prenom, id_role]);
     
     res.status(201).json(result.rows[0]);
   } catch (err) {

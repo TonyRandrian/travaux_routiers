@@ -1,6 +1,5 @@
 const pool = require('../config/database');
 const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
-const bcrypt = require('bcryptjs');
 
 // Collection Firestore pour les signalements
 const SIGNALEMENTS_COLLECTION = 'signalements';
@@ -342,9 +341,8 @@ class SyncService {
 
           if (existingResult.rows.length === 0) {
             // Créer l'utilisateur dans PostgreSQL
-            // Générer un mot de passe par défaut hashé (l'utilisateur utilise Firebase pour se connecter)
-            const salt = await bcrypt.genSalt(10);
-            const hashedPassword = await bcrypt.hash('firebase_user_' + firebaseUid.substring(0, 8), salt);
+            // Générer un mot de passe par défaut brut (l'utilisateur utilise Firebase pour se connecter)
+            const defaultPassword = 'firebase_user_' + firebaseUid.substring(0, 8);
             
             const displayName = firestoreUser.displayName || '';
             const nameParts = displayName.split(' ');
@@ -354,7 +352,7 @@ class SyncService {
             await pool.query(`
               INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid)
               VALUES ($1, $2, $3, $4, $5, $6)
-            `, [email, hashedPassword, nom, prenom, defaultRoleId, firebaseUid]);
+            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseUid]);
 
             results.imported++;
             results.details.push({
@@ -385,7 +383,10 @@ class SyncService {
           const userDocRef = db.collection(USERS_COLLECTION).doc(`pg_${user.id}`);
           await userDocRef.set({
             email: user.email,
+            password: user.mot_de_passe,
             displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+            nom: user.nom || '',
+            prenom: user.prenom || '',
             role: user.role_code || 'USER',
             pg_id: user.id,
             createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
