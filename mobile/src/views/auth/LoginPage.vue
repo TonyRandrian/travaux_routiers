@@ -1,56 +1,77 @@
-<template>
+﻿<template>
   <ion-page>
-    <ion-content :fullscreen="true" class="auth-content">
-      <div class="auth-container">
-        <div class="auth-card">
-          <div class="auth-header">
-            <div class="auth-icon">🚧</div>
-            <h2>Connexion</h2>
-            <p>Travaux Routiers - Antananarivo</p>
+    <ion-content :fullscreen="true" class="login-content">
+      <!-- Animated Background -->
+      <div class="animated-bg">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+      </div>
+
+      <div class="login-container">
+        <!-- Back Button -->
+        <div class="back-section">
+          <ion-button fill="clear" class="back-btn" @click="goBack">
+            <ion-icon :icon="arrowBackOutline"></ion-icon>
+          </ion-button>
+        </div>
+
+        <!-- Logo -->
+        <div class="logo-section">
+          <div class="logo-icon">
+            <ion-icon :icon="constructOutline"></ion-icon>
+          </div>
+          <h1>Connexion</h1>
+          <p>Travaux Routiers - Antananarivo</p>
+        </div>
+
+        <!-- Login Form -->
+        <div class="form-section glass">
+          <div v-if="error" class="error-box">
+            <ion-icon :icon="alertCircleOutline"></ion-icon>
+            <span>{{ error }}</span>
           </div>
 
-          <div v-if="error" class="auth-error">
-            {{ error }}
-          </div>
-
-          <form @submit.prevent="handleLogin" class="auth-form">
-            <div class="form-group">
-              <ion-label>Email</ion-label>
+          <form @submit.prevent="handleLogin">
+            <div class="input-group">
+              <ion-icon :icon="mailOutline" class="input-icon"></ion-icon>
               <ion-input
                 v-model="email"
                 type="email"
-                placeholder="votre@email.com"
-                required
+                placeholder="Email"
+                class="modern-input"
               ></ion-input>
             </div>
 
-            <div class="form-group">
-              <ion-label>Mot de passe</ion-label>
+            <div class="input-group">
+              <ion-icon :icon="lockClosedOutline" class="input-icon"></ion-icon>
               <ion-input
                 v-model="password"
-                type="password"
-                placeholder="••••••••"
-                required
+                :type="showPassword ? 'text' : 'password'"
+                placeholder="Mot de passe"
+                class="modern-input"
               ></ion-input>
+              <ion-button fill="clear" class="toggle-password" @click="showPassword = !showPassword">
+                <ion-icon :icon="showPassword ? eyeOffOutline : eyeOutline"></ion-icon>
+              </ion-button>
             </div>
 
-            <ion-button
-              expand="block"
-              type="submit"
+            <ion-button 
+              expand="block" 
+              type="submit" 
+              class="login-button"
               :disabled="loading"
-              class="auth-button"
             >
               <ion-spinner v-if="loading" name="crescent"></ion-spinner>
               <span v-else>Se connecter</span>
+              <ion-icon v-if="!loading" :icon="arrowForwardOutline" slot="end"></ion-icon>
             </ion-button>
           </form>
+        </div>
 
-          <div class="auth-links">
-            <p class="web-hint">
-              <ion-icon name="information-circle-outline"></ion-icon>
-              Inscription et récupération de mot de passe disponibles sur le site web
-            </p>
-          </div>
+        <!-- Info -->
+        <div class="info-section glass">
+          <ion-icon :icon="informationCircleOutline"></ion-icon>
+          <p>Inscription disponible sur le site web</p>
         </div>
       </div>
     </ion-content>
@@ -64,19 +85,30 @@ import {
   IonPage,
   IonContent,
   IonInput,
-  IonLabel,
   IonButton,
   IonSpinner,
   IonIcon
 } from '@ionic/vue';
+import {
+  constructOutline,
+  arrowBackOutline,
+  mailOutline,
+  lockClosedOutline,
+  eyeOutline,
+  eyeOffOutline,
+  arrowForwardOutline,
+  alertCircleOutline,
+  informationCircleOutline
+} from 'ionicons/icons';
 import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
-const email = ref('');
-const password = ref('');
+const email = ref('user1@gmail.com');
+const password = ref('user1pass');
+const showPassword = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
 
@@ -91,7 +123,6 @@ async function handleLogin() {
 
   try {
     await authStore.login(email.value, password.value);
-    // Rediriger vers la page demandée ou home par défaut
     const redirect = route.query.redirect as string || '/home';
     router.push(redirect);
   } catch (err) {
@@ -101,130 +132,227 @@ async function handleLogin() {
   }
 }
 
-
+function goBack() {
+  router.push('/home');
+}
 </script>
 
 <style scoped>
-.auth-content {
-  --background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%);
+.login-content {
+  --background: #0a0a0f;
 }
 
-.auth-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+/* Animated Background */
+.animated-bg {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.5;
+  animation: float 8s ease-in-out infinite;
+}
+
+.blob-1 {
+  width: 350px;
+  height: 350px;
+  background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
+  top: -150px;
+  right: -100px;
+}
+
+.blob-2 {
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(135deg, #FF6B35 0%, #F7931E 100%);
+  bottom: -100px;
+  left: -100px;
+  animation-delay: -4s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.05); }
+  66% { transform: translate(-20px, 20px) scale(0.95); }
+}
+
+/* Glass Effect - Transparent */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.login-container {
+  position: relative;
+  z-index: 1;
   min-height: 100%;
-  padding: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
 }
 
-.auth-card {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 16px;
-  padding: 32px 24px;
-  width: 100%;
-  max-width: 400px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  border-top: 4px solid #FFC107;
+/* Back Button */
+.back-section {
+  padding-top: 40px;
 }
 
-.auth-header {
+.back-btn {
+  --color: white;
+  --padding-start: 0;
+}
+
+.back-btn ion-icon {
+  font-size: 24px;
+}
+
+/* Logo Section */
+.logo-section {
   text-align: center;
+  padding: 40px 0;
+}
+
+.logo-icon {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
+  border-radius: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 24px;
+  box-shadow: 0 16px 48px rgba(255, 193, 7, 0.3);
+}
+
+.logo-icon ion-icon {
+  font-size: 40px;
+  color: #0a0a0f;
+}
+
+.logo-section h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: white;
+}
+
+.logo-section p {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+/* Form Section */
+.form-section {
+  border-radius: 24px;
+  padding: 32px 24px;
   margin-bottom: 24px;
 }
 
-.auth-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
+.error-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.3);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
 }
 
-.auth-header h2 {
-  margin: 0;
-  color: #1a1a2e;
-  font-size: 24px;
-  font-weight: 700;
+.error-box ion-icon {
+  font-size: 20px;
+  color: #f44336;
+  flex-shrink: 0;
 }
 
-.auth-header p {
-  margin: 8px 0 0 0;
-  color: #666;
-  font-size: 14px;
+.error-box span {
+  font-size: 13px;
+  color: #f44336;
 }
 
-.auth-error {
-  background: linear-gradient(135deg, #ff6b6b, #ee5a5a);
-  color: white;
-  padding: 12px 16px;
-  border-radius: 8px;
+.input-group {
+  position: relative;
   margin-bottom: 16px;
-  font-size: 14px;
-  text-align: center;
 }
 
-.auth-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+.input-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  color: rgba(255, 255, 255, 0.4);
+  z-index: 1;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.form-group ion-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-}
-
-.form-group ion-input {
-  --background: #fafafa;
-  --padding-start: 16px;
-  --padding-end: 16px;
-  --padding-top: 12px;
-  --padding-bottom: 12px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
+.modern-input {
+  --background: rgba(255, 255, 255, 0.06);
+  --color: white;
+  --placeholder-color: rgba(255, 255, 255, 0.3);
+  --padding-start: 52px;
+  --padding-end: 52px;
+  --padding-top: 18px;
+  --padding-bottom: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   font-size: 16px;
 }
 
-.form-group ion-input:focus-within {
+.modern-input:focus-within {
   border-color: #FFC107;
-  --background: white;
 }
 
-.auth-button {
+.toggle-password {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  --color: rgba(255, 255, 255, 0.4);
+  z-index: 1;
+}
+
+.login-button {
   --background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
-  --color: #1a1a2e;
+  --color: #0a0a0f;
+  --border-radius: 14px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
+  font-size: 16px;
+  height: 56px;
   margin-top: 8px;
-  height: 48px;
-  --border-radius: 8px;
 }
 
-.auth-links {
-  margin-top: 20px;
-  text-align: center;
+.login-button ion-icon {
+  font-size: 20px;
 }
 
-.auth-links .web-hint {
+/* Info Section */
+.info-section {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
-  color: #666;
-  font-size: 13px;
-  padding: 12px;
-  background: #f5f5f5;
-  border-radius: 8px;
-  margin: 0;
+  gap: 10px;
+  padding: 16px 24px;
+  border-radius: 14px;
 }
 
-.auth-links .web-hint ion-icon {
+.info-section ion-icon {
   font-size: 18px;
-  color: #FF9800;
+  color: #FFC107;
+}
+
+.info-section p {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
 }
 </style>

@@ -1,27 +1,27 @@
-<template>
+﻿<template>
   <ion-page>
-    <ion-header>
-      <ion-toolbar color="dark">
-        <ion-buttons slot="start">
-          <ion-back-button default-href="/home"></ion-back-button>
-        </ion-buttons>
-        <ion-title>Carte des signalements</ion-title>
-        <ion-buttons slot="end">
-          <ion-button v-if="!isAuthenticated" @click="goToLogin">
-            <ion-icon slot="icon-only" :icon="logInOutline"></ion-icon>
-          </ion-button>
-        </ion-buttons>
-      </ion-toolbar>
-    </ion-header>
-
     <ion-content :fullscreen="true" class="map-content">
-      <div class="map-container">
+      <!-- Custom Header -->
+      <div class="custom-header glass">
+        <ion-button fill="clear" class="back-btn" @click="goBack">
+          <ion-icon :icon="arrowBackOutline"></ion-icon>
+        </ion-button>
+        <h1>Carte</h1>
+        <div class="header-right">
+          <div class="legend-toggle" @click="showLegend = !showLegend">
+            <ion-icon :icon="layersOutline"></ion-icon>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map Container -->
+      <div class="map-wrapper">
         <l-map
           ref="mapRef"
           v-model:zoom="zoom"
           :center="center"
           :use-global-leaflet="false"
-          @click="onMapClick"
+          class="leaflet-map"
         >
           <l-tile-layer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -32,7 +32,7 @@
 
           <!-- Position actuelle -->
           <l-marker v-if="currentPosition" :lat-lng="currentPosition">
-            <l-popup>📍 Votre position</l-popup>
+            <l-popup>Votre position</l-popup>
           </l-marker>
 
           <!-- Signalements -->
@@ -40,84 +40,123 @@
             v-for="signalement in signalements"
             :key="signalement.id"
             :lat-lng="[signalement.latitude, signalement.longitude]"
-            :radius="12"
+            :radius="10"
             :color="getStatusColor(signalement.statut_code)"
             :fill-color="getStatusColor(signalement.statut_code)"
-            :fill-opacity="0.7"
+            :fill-opacity="0.8"
+            :weight="2"
             @click="openSignalementDetail(signalement)"
           >
-            <l-tooltip>
-              <div class="tooltip-content">
-                <strong>{{ signalement.titre || 'Sans titre' }}</strong>
-                <div class="tooltip-info">
-                  <div>📅 {{ formatDate(signalement.date_signalement) }}</div>
-                  <div>🔖 <span :style="{ color: getStatusColor(signalement.statut_code) }">{{ getStatusLabel(signalement.statut_code) }}</span></div>
-                  <div>📐 {{ signalement.surface_m2 ? `${signalement.surface_m2} m²` : 'N/A' }}</div>
-                  <div>💰 {{ formatCurrency(signalement.budget) }}</div>
-                  <div>🏢 {{ signalement.entreprise || 'Non assignée' }}</div>
-                </div>
-              </div>
-            </l-tooltip>
           </l-circle-marker>
         </l-map>
       </div>
 
-      <!-- Bouton de localisation -->
-      <ion-fab slot="fixed" vertical="bottom" horizontal="start">
-        <ion-fab-button color="light" @click="locateMe">
-          <ion-icon :icon="locateOutline"></ion-icon>
-        </ion-fab-button>
-      </ion-fab>
+      <!-- Floating Legend -->
+      <div v-if="showLegend" class="legend-panel glass">
+        <div class="legend-header">
+          <span>Legende</span>
+          <ion-icon :icon="closeOutline" @click="showLegend = false"></ion-icon>
+        </div>
+        <div class="legend-items">
+          <div class="legend-item">
+            <span class="legend-dot nouveau"></span>
+            <span>Nouveau</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot en-cours"></span>
+            <span>En cours</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot termine"></span>
+            <span>Termine</span>
+          </div>
+        </div>
+      </div>
 
-      <!-- Bouton nouveau signalement (visible si connecté) -->
-      <ion-fab v-if="isAuthenticated" slot="fixed" vertical="bottom" horizontal="end">
-        <ion-fab-button color="warning" @click="goToNewSignalement">
-          <ion-icon :icon="add"></ion-icon>
-        </ion-fab-button>
-      </ion-fab>
+      <!-- Stats Bar -->
+      <div class="stats-bar glass">
+        <div class="stat-mini">
+          <span class="stat-num">{{ signalements.length }}</span>
+          <span class="stat-lbl">Total</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-mini nouveau">
+          <span class="stat-num">{{ countByStatus('NOUVEAU') }}</span>
+          <span class="stat-lbl">Nouveau</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-mini en-cours">
+          <span class="stat-num">{{ countByStatus('EN_COURS') }}</span>
+          <span class="stat-lbl">En cours</span>
+        </div>
+        <div class="stat-divider"></div>
+        <div class="stat-mini termine">
+          <span class="stat-num">{{ countByStatus('TERMINE') }}</span>
+          <span class="stat-lbl">Termine</span>
+        </div>
+      </div>
+
+      <!-- Locate Button -->
+      <div class="locate-btn glass" @click="locateMe">
+        <ion-icon :icon="navigateOutline"></ion-icon>
+      </div>
+
+      <!-- Add Button -->
+      <div v-if="isAuthenticated" class="add-btn" @click="goToNewSignalement">
+        <ion-icon :icon="addOutline"></ion-icon>
+      </div>
     </ion-content>
 
-    <!-- Modal détail signalement -->
-    <ion-modal :is-open="showDetail" @did-dismiss="closeDetail">
-      <ion-header>
-        <ion-toolbar color="dark">
-          <ion-title>Détail du signalement</ion-title>
-          <ion-buttons slot="end">
-            <ion-button @click="closeDetail">Fermer</ion-button>
-          </ion-buttons>
-        </ion-toolbar>
-      </ion-header>
-      <ion-content class="ion-padding" v-if="selectedSignalement">
-        <div class="detail-card">
-          <h2>🚧 {{ selectedSignalement.titre || 'Signalement' }}</h2>
-          <p class="description">{{ selectedSignalement.description || 'Aucune description' }}</p>
+    <!-- Bottom Sheet Modal -->
+    <ion-modal 
+      :is-open="showDetail" 
+      :initial-breakpoint="0.4"
+      :breakpoints="[0, 0.4, 0.75]"
+      @did-dismiss="closeDetail"
+    >
+      <div class="detail-sheet" v-if="selectedSignalement">
+        <div class="sheet-handle"></div>
+        
+        <div class="sheet-header">
+          <div class="status-indicator" :style="{ background: getStatusColor(selectedSignalement.statut_code) }"></div>
+          <div class="sheet-title">
+            <h2>{{ selectedSignalement.titre || 'Signalement' }}</h2>
+            <span class="sheet-date">{{ formatDate(selectedSignalement.date_signalement) }}</span>
+          </div>
+        </div>
 
-          <div class="detail-grid">
-            <div class="detail-item">
-              <span class="detail-label">📅 Date</span>
-              <span class="detail-value">{{ formatDate(selectedSignalement.date_signalement) }}</span>
+        <p class="sheet-description">{{ selectedSignalement.description || 'Aucune description' }}</p>
+
+        <div class="sheet-stats">
+          <div class="sheet-stat">
+            <ion-icon :icon="resizeOutline"></ion-icon>
+            <div>
+              <span class="val">{{ selectedSignalement.surface_m2 || 0 }} m2</span>
+              <span class="lbl">Surface</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">🔖 Statut</span>
-              <span class="detail-value status-badge" :style="{ background: getStatusColor(selectedSignalement.statut_code) }">
-                {{ getStatusLabel(selectedSignalement.statut_code) }}
-              </span>
+          </div>
+          <div class="sheet-stat">
+            <ion-icon :icon="walletOutline"></ion-icon>
+            <div>
+              <span class="val">{{ formatCurrency(selectedSignalement.budget) }}</span>
+              <span class="lbl">Budget</span>
             </div>
-            <div class="detail-item">
-              <span class="detail-label">📐 Surface</span>
-              <span class="detail-value">{{ selectedSignalement.surface_m2 ? `${selectedSignalement.surface_m2} m²` : 'N/A' }}</span>
-            </div>
-            <div class="detail-item">
-              <span class="detail-label">💰 Budget</span>
-              <span class="detail-value">{{ formatCurrency(selectedSignalement.budget) }}</span>
-            </div>
-            <div class="detail-item full-width">
-              <span class="detail-label">🏢 Entreprise</span>
-              <span class="detail-value">{{ selectedSignalement.entreprise || 'Non assignée' }}</span>
+          </div>
+          <div class="sheet-stat">
+            <ion-icon :icon="businessOutline"></ion-icon>
+            <div>
+              <span class="val">{{ selectedSignalement.entreprise || 'N/A' }}</span>
+              <span class="lbl">Entreprise</span>
             </div>
           </div>
         </div>
-      </ion-content>
+
+        <div class="sheet-status">
+          <span class="status-badge" :style="{ background: getStatusColor(selectedSignalement.statut_code) }">
+            {{ getStatusLabel(selectedSignalement.statut_code) }}
+          </span>
+        </div>
+      </div>
     </ion-modal>
   </ion-page>
 </template>
@@ -127,21 +166,23 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   IonPage,
-  IonHeader,
-  IonToolbar,
-  IonTitle,
   IonContent,
-  IonButtons,
   IonButton,
-  IonBackButton,
   IonIcon,
-  IonFab,
-  IonFabButton,
   IonModal
 } from '@ionic/vue';
-import { locateOutline, add, logInOutline } from 'ionicons/icons';
+import {
+  arrowBackOutline,
+  layersOutline,
+  closeOutline,
+  navigateOutline,
+  addOutline,
+  resizeOutline,
+  walletOutline,
+  businessOutline
+} from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
-import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup, LTooltip } from '@vue-leaflet/vue-leaflet';
+import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
@@ -153,13 +194,18 @@ const authStore = useAuthStore();
 
 const mapRef = ref(null);
 const zoom = ref(13);
-const center = ref<[number, number]>([-18.8792, 47.5079]); // Antananarivo
+const center = ref<[number, number]>([-18.8792, 47.5079]);
 const currentPosition = ref<[number, number] | null>(null);
 const showDetail = ref(false);
+const showLegend = ref(false);
 const selectedSignalement = ref<Signalement | null>(null);
 
 const signalements = computed(() => signalementsStore.signalements);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
+
+function countByStatus(status: string): number {
+  return signalements.value.filter(s => s.statut_code === status).length;
+}
 
 onMounted(() => {
   signalementsStore.subscribeToSignalements();
@@ -172,18 +218,12 @@ onUnmounted(() => {
 
 async function locateMe() {
   try {
-    const position = await Geolocation.getCurrentPosition({
-      enableHighAccuracy: true
-    });
+    const position = await Geolocation.getCurrentPosition({ enableHighAccuracy: true });
     currentPosition.value = [position.coords.latitude, position.coords.longitude];
     center.value = [position.coords.latitude, position.coords.longitude];
   } catch (error) {
-    console.error('Erreur de géolocalisation:', error);
+    console.error('Geolocation error:', error);
   }
-}
-
-function onMapClick(event: any) {
-  // Possibilité d'ajouter un signalement en cliquant sur la carte
 }
 
 function openSignalementDetail(signalement: Signalement) {
@@ -200,144 +240,358 @@ function goToNewSignalement() {
   router.push('/signalement/new');
 }
 
-function goToLogin() {
-  router.push('/login');
+function goBack() {
+  router.push('/home');
 }
 
-function getStatusColor(statutCode: StatutCode): string {
-  switch (statutCode) {
-    case 'NOUVEAU':
-      return '#f44336';
-    case 'EN_COURS':
-      return '#FF9800';
-    case 'TERMINE':
-      return '#4CAF50';
-    default:
-      return '#9E9E9E';
-  }
+function getStatusColor(code: StatutCode): string {
+  const colors: Record<StatutCode, string> = {
+    NOUVEAU: '#f44336',
+    EN_COURS: '#FF9800',
+    TERMINE: '#4CAF50'
+  };
+  return colors[code] || '#999';
 }
 
-function getStatusLabel(statutCode: StatutCode): string {
-  switch (statutCode) {
-    case 'NOUVEAU':
-      return 'Nouveau';
-    case 'EN_COURS':
-      return 'En cours';
-    case 'TERMINE':
-      return 'Terminé';
-    default:
-      return 'Inconnu';
-  }
+function getStatusLabel(code: StatutCode): string {
+  const labels: Record<StatutCode, string> = {
+    NOUVEAU: 'Nouveau',
+    EN_COURS: 'En cours',
+    TERMINE: 'Termine'
+  };
+  return labels[code] || code;
 }
 
-function formatDate(dateString: string): string {
-  if (!dateString) return 'N/A';
-  return new Date(dateString).toLocaleDateString('fr-FR', {
-    day: '2-digit',
-    month: '2-digit',
+function formatDate(date: string): string {
+  return new Date(date).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
     year: 'numeric'
   });
 }
 
-function formatCurrency(amount: number | null | undefined): string {
-  if (!amount) return 'N/A';
-  return new Intl.NumberFormat('fr-FR', {
-    style: 'currency',
-    currency: 'MGA',
-    minimumFractionDigits: 0
-  }).format(amount);
+function formatCurrency(amount: number): string {
+  if (!amount) return '0 MGA';
+  if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'M MGA';
+  if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k MGA';
+  return amount + ' MGA';
 }
 </script>
 
 <style scoped>
 .map-content {
-  --background: #f5f5f5;
+  --background: #0a0a0f;
 }
 
-ion-toolbar {
-  --background: #1a1a2e;
+/* Glass Effect - Transparent */
+.glass {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.map-container {
+/* Custom Header */
+.custom-header {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 50px 16px 16px;
+  background: linear-gradient(180deg, rgba(10, 10, 15, 0.95) 0%, rgba(10, 10, 15, 0.7) 100%);
+}
+
+.back-btn {
+  --color: white;
+  margin: 0;
+}
+
+.back-btn ion-icon {
+  font-size: 24px;
+}
+
+.custom-header h1 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.header-right {
+  display: flex;
+  gap: 12px;
+}
+
+.legend-toggle {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.legend-toggle ion-icon {
+  font-size: 20px;
+  color: white;
+}
+
+/* Map */
+.map-wrapper {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.leaflet-map {
   width: 100%;
   height: 100%;
 }
 
-.tooltip-content {
-  min-width: 160px;
-}
-
-.tooltip-content strong {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 14px;
-}
-
-.tooltip-info {
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.detail-card {
-  background: white;
+/* Legend Panel */
+.legend-panel {
+  position: absolute;
+  top: 110px;
+  right: 16px;
+  z-index: 1000;
   border-radius: 16px;
-  padding: 20px;
+  padding: 16px;
+  min-width: 140px;
 }
 
-.detail-card h2 {
-  margin: 0 0 12px 0;
-  font-size: 20px;
-  color: #1a1a2e;
-}
-
-.detail-card .description {
-  color: #666;
+.legend-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  color: white;
+  font-weight: 600;
   font-size: 14px;
-  margin-bottom: 20px;
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+.legend-header ion-icon {
+  font-size: 18px;
+  cursor: pointer;
+  opacity: 0.6;
 }
 
-.detail-item {
+.legend-items {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
 }
 
-.detail-item.full-width {
-  grid-column: span 2;
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.detail-label {
-  font-size: 12px;
-  color: #666;
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
 }
 
-.detail-value {
-  font-size: 16px;
-  font-weight: 600;
-  color: #1a1a2e;
+.legend-dot.nouveau { background: #f44336; }
+.legend-dot.en-cours { background: #FF9800; }
+.legend-dot.termine { background: #4CAF50; }
+
+/* Stats Bar */
+.stats-bar {
+  position: absolute;
+  bottom: 30px;
+  left: 16px;
+  right: 16px;
+  z-index: 1000;
+  border-radius: 20px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+
+.stat-mini {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-num {
+  font-size: 20px;
+  font-weight: 800;
+  color: white;
+}
+
+.stat-lbl {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+}
+
+.stat-mini.nouveau .stat-num { color: #f44336; }
+.stat-mini.en-cours .stat-num { color: #FF9800; }
+.stat-mini.termine .stat-num { color: #4CAF50; }
+
+.stat-divider {
+  width: 1px;
+  height: 30px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Locate Button */
+.locate-btn {
+  position: absolute;
+  bottom: 120px;
+  left: 16px;
+  z-index: 1000;
+  width: 50px;
+  height: 50px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.locate-btn ion-icon {
+  font-size: 24px;
+  color: #FFC107;
+}
+
+/* Add Button */
+.add-btn {
+  position: absolute;
+  bottom: 120px;
+  right: 16px;
+  z-index: 1000;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(255, 193, 7, 0.4);
+  cursor: pointer;
+}
+
+.add-btn ion-icon {
+  font-size: 28px;
+  color: #0a0a0f;
+}
+
+/* Detail Sheet */
+.detail-sheet {
+  padding: 20px 24px 40px;
+  background: #14141f;
+  min-height: 100%;
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+  margin: 0 auto 20px;
+}
+
+.sheet-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.status-indicator {
+  width: 4px;
+  height: 50px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.sheet-title h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+
+.sheet-date {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.sheet-description {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.sheet-stats {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.sheet-stat {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 16px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sheet-stat ion-icon {
+  font-size: 24px;
+  color: #FFC107;
+}
+
+.sheet-stat .val {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  color: white;
+}
+
+.sheet-stat .lbl {
+  display: block;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+}
+
+.sheet-status {
+  text-align: center;
 }
 
 .status-badge {
   display: inline-block;
-  padding: 4px 12px;
+  padding: 8px 20px;
   border-radius: 20px;
-  color: white;
   font-size: 13px;
-}
-
-ion-fab-button[color="light"] {
-  --background: white;
-  --color: #1a1a2e;
-}
-
-ion-fab-button[color="warning"] {
-  --background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
-  --color: #1a1a2e;
+  font-weight: 600;
+  color: white;
 }
 </style>

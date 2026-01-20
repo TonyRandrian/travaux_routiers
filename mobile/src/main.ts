@@ -39,12 +39,18 @@ import './theme/variables.css';
 /* Leaflet CSS */
 import 'leaflet/dist/leaflet.css';
 
+import { useAuthStore } from './stores/auth';
+
 const pinia = createPinia();
 
 const app = createApp(App)
   .use(IonicVue)
   .use(pinia)
   .use(router);
+
+// Initialiser l'écouteur d'authentification Firebase
+const authStore = useAuthStore(pinia);
+authStore.initAuthListener();
 
 router.isReady().then(() => {
   app.mount('#app');
