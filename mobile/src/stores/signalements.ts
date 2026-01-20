@@ -10,8 +10,60 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
-import type { Signalement, Stats, SignalementUtilisateur } from '@/types';
+import type { Signalement, Stats, SignalementUtilisateur, StatutSignalement } from '@/types';
 import { useReferentielsStore } from '@/stores/referentiels';
+
+// Fonction pour normaliser un signalement (supporte format plat et imbriqué)
+function normalizeSignalement(doc: any): Signalement {
+  const data = doc.data ? doc.data() : doc;
+  const referentielsStore = useReferentielsStore();
+  
+  // Normaliser le statut: supporte statut_code (plat) ou statut (imbriqué)
+  let statut: StatutSignalement;
+  if (data.statut && typeof data.statut === 'object' && data.statut.code) {
+    // Format imbriqué: { code, libelle, id }
+    statut = data.statut;
+  } else if (data.statut_code) {
+    // Format plat (ancien): statut_code = "NOUVEAU"
+    statut = referentielsStore.getStatutByCode(data.statut_code);
+  } else {
+    // Fallback
+    statut = referentielsStore.getStatutByCode('NOUVEAU');
+  }
+  
+  // Normaliser l'utilisateur: supporte id_utilisateur (plat) ou utilisateur (imbriqué)
+  let utilisateur = data.utilisateur;
+  if (!utilisateur && data.id_utilisateur) {
+    utilisateur = {
+      id: data.id_utilisateur,
+      email: data.email_utilisateur || '',
+      nom: data.nom_utilisateur || '',
+      prenom: data.prenom_utilisateur || ''
+    };
+  }
+  
+  // Normaliser l'entreprise: supporte id_entreprise (plat) ou entreprise (imbriqué)
+  let entreprise = data.entreprise;
+  if (!entreprise && data.id_entreprise) {
+    entreprise = referentielsStore.getEntrepriseById(data.id_entreprise);
+  }
+  
+  return {
+    id: doc.id || data.id,
+    titre: data.titre || '',
+    description: data.description || '',
+    latitude: data.latitude || 0,
+    longitude: data.longitude || 0,
+    surface_m2: data.surface_m2 || null,
+    budget: data.budget || null,
+    date_signalement: data.date_signalement || '',
+    statut,
+    utilisateur,
+    entreprise,
+    postgres_id: data.postgres_id,
+    synced_at: data.synced_at
+  };
+}
 
 export const useSignalementsStore = defineStore('signalements', () => {
   const signalements = ref<Signalement[]>([]);
@@ -59,10 +111,7 @@ export const useSignalementsStore = defineStore('signalements', () => {
       const q = query(signalementsRef, orderBy('date_signalement', 'desc'));
 
       unsubscribe = onSnapshot(q, (snapshot) => {
-        signalements.value = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })) as Signalement[];
+        signalements.value = snapshot.docs.map(doc => normalizeSignalement(doc));
         loading.value = false;
       }, (err) => {
         console.error('Erreur subscription signalements:', err);
@@ -86,10 +135,7 @@ export const useSignalementsStore = defineStore('signalements', () => {
       const q = query(signalementsRef, orderBy('date_signalement', 'desc'));
       const snapshot = await getDocs(q);
 
-      signalements.value = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Signalement[];
+      signalements.value = snapshot.docs.map(doc => normalizeSignalement(doc));
     } catch (err) {
       console.error('Erreur fetchSignalements:', err);
       error.value = 'Erreur lors du chargement des signalements';

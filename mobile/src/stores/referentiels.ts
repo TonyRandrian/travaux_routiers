@@ -26,10 +26,10 @@ const STATUTS_FALLBACK: StatutSignalement[] = [
 ];
 
 const ENTREPRISES_FALLBACK: Entreprise[] = [
-  { id: 1, nom: 'COLAS Madagascar (en dur)', contact: 'colas@example.mg' },
-  { id: 2, nom: 'SOGEA SATOM (en dur)', contact: 'sogea@example.mg' },
-  { id: 3, nom: 'EIFFAGE Madagascar (en dur)', contact: 'eiffage@example.mg' },
-  { id: 4, nom: 'ENTREPRISE GÉNÉRALE (en dur)', contact: 'general@example.mg' }
+  { id: 1, nom: 'COLAS Madagascar ', contact: 'colas@example.mg' },
+  { id: 2, nom: 'SOGEA SATOM ', contact: 'sogea@example.mg' },
+  { id: 3, nom: 'EIFFAGE Madagascar ', contact: 'eiffage@example.mg' },
+  { id: 4, nom: 'ENTREPRISE GÉNÉRALE ', contact: 'general@example.mg' }
 ];
 
 export const useReferentielsStore = defineStore('referentiels', () => {
