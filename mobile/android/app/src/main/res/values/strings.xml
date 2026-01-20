@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Travaux Routiers</string>
+    <string name="title_activity_main">Travaux Routiers</string>
+    <string name="package_name">mg.travaux.routiers</string>
+    <string name="custom_url_scheme">mg.travaux.routiers</string>
+</resources>
