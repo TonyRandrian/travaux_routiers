@@ -169,30 +169,21 @@ import { locateOutline } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { collection, getDocs } from 'firebase/firestore';
-import { db } from '@/config/firebase';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
+import { useReferentielsStore } from '@/stores/referentiels';
 
 const router = useRouter();
 const signalementsStore = useSignalementsStore();
 const authStore = useAuthStore();
+const referentielsStore = useReferentielsStore();
 
 const mapRef = ref(null);
 const mapZoom = ref(15);
 const mapCenter = ref<[number, number]>([-18.8792, 47.5079]);
-const loadingEntreprises = ref(true);
-const entreprisesFromFirebase = ref(false);
 
-// Entreprises en dur pour les tests (fallback si Firebase indisponible)
-const ENTREPRISES_FALLBACK = [
-  { id: 1, nom: 'COLAS Madagascar (en dur)', contact: 'colas@example.mg' },
-  { id: 2, nom: 'SOGEA SATOM (en dur)', contact: 'sogea@example.mg' },
-  { id: 3, nom: 'EIFFAGE Madagascar (en dur)', contact: 'eiffage@example.mg' },
-  { id: 4, nom: 'ENTREPRISE GÉNÉRALE (en dur)', contact: 'general@example.mg' }
-];
-
-const entreprises = ref(ENTREPRISES_FALLBACK);
+// Entreprises depuis le store referentiels
+const entreprises = computed(() => referentielsStore.entreprises);
 
 const form = ref({
   titre: '',
@@ -216,41 +207,9 @@ const isFormValid = computed(() => {
 
 onMounted(async () => {
   await Promise.all([
-    useCurrentLocation(),
-    loadEntreprises()
+    useCurrentLocation()
   ]);
 });
-
-// Charger les entreprises depuis Firebase, fallback sur les données en dur
-async function loadEntreprises() {
-  loadingEntreprises.value = true;
-  try {
-    const entreprisesRef = collection(db, 'entreprises');
-    const snapshot = await getDocs(entreprisesRef);
-    
-    if (!snapshot.empty) {
-      entreprises.value = snapshot.docs.map(doc => ({
-        id: doc.data().id || parseInt(doc.id),
-        nom: doc.data().nom,
-        contact: doc.data().contact
-      }));
-      entreprisesFromFirebase.value = true;
-      console.log('Entreprises chargées depuis Firebase:', entreprises.value.length);
-    } else {
-      // Collection vide, utiliser fallback
-      console.log('Collection entreprises vide, utilisation des données en dur');
-      entreprises.value = ENTREPRISES_FALLBACK;
-      entreprisesFromFirebase.value = false;
-    }
-  } catch (err) {
-    console.error('Erreur chargement entreprises Firebase:', err);
-    // Fallback sur les données en dur
-    entreprises.value = ENTREPRISES_FALLBACK;
-    entreprisesFromFirebase.value = false;
-  } finally {
-    loadingEntreprises.value = false;
-  }
-}
 
 async function useCurrentLocation() {
   try {

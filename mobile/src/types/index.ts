@@ -67,10 +67,3 @@ export interface MapCenter {
   lat: number;
   lng: number;
 }
-
-// Constantes pour les statuts (correspondant à PostgreSQL)
-export const STATUTS: StatutSignalement[] = [
-  { id: 1, code: 'NOUVEAU', libelle: 'Nouveau' },
-  { id: 2, code: 'EN_COURS', libelle: 'En cours' },
-  { id: 3, code: 'TERMINE', libelle: 'Terminé' }
-];

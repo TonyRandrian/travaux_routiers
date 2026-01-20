@@ -132,11 +132,13 @@ import {
 import { add } from 'ionicons/icons';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
+import { useReferentielsStore } from '@/stores/referentiels';
 import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
 const signalementsStore = useSignalementsStore();
 const authStore = useAuthStore();
+const referentielsStore = useReferentielsStore();
 
 const loading = computed(() => signalementsStore.loading);
 const showDetail = ref(false);
@@ -175,30 +177,14 @@ function closeDetail() {
   selectedSignalement.value = null;
 }
 
-function getStatusColor(statutCode: StatutCode): string {
-  switch (statutCode) {
-    case 'NOUVEAU':
-      return '#f44336';
-    case 'EN_COURS':
-      return '#FF9800';
-    case 'TERMINE':
-      return '#4CAF50';
-    default:
-      return '#9E9E9E';
-  }
+function getStatusColor(statutCode: string | undefined): string {
+  return referentielsStore.getColorByCode(statutCode);
 }
 
-function getStatusLabel(statutCode: StatutCode): string {
-  switch (statutCode) {
-    case 'NOUVEAU':
-      return 'Nouveau';
-    case 'EN_COURS':
-      return 'En cours';
-    case 'TERMINE':
-      return 'Terminé';
-    default:
-      return 'Inconnu';
-  }
+function getStatusLabel(statutCode: string | undefined): string {
+  if (!statutCode) return 'Inconnu';
+  const statut = referentielsStore.getStatutByCode(statutCode);
+  return statut?.libelle || statutCode;
 }
 
 function formatDate(dateString: string): string {

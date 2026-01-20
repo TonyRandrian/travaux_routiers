@@ -51,49 +51,37 @@
         </l-map>
       </div>
 
-      <!-- Floating Legend -->
+      <!-- Floating Legend - Dynamique depuis Firebase -->
       <div v-if="showLegend" class="legend-panel glass">
         <div class="legend-header">
           <span>Legende</span>
           <ion-icon :icon="closeOutline" @click="showLegend = false"></ion-icon>
         </div>
         <div class="legend-items">
-          <div class="legend-item">
-            <span class="legend-dot nouveau"></span>
-            <span>Nouveau</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot en-cours"></span>
-            <span>En cours</span>
-          </div>
-          <div class="legend-item">
-            <span class="legend-dot termine"></span>
-            <span>Termine</span>
+          <div 
+            v-for="statut in referentielsStore.statuts" 
+            :key="statut.id" 
+            class="legend-item"
+          >
+            <span class="legend-dot" :style="{ background: statut.couleur }"></span>
+            <span>{{ statut.libelle }}</span>
           </div>
         </div>
       </div>
 
-      <!-- Stats Bar -->
+      <!-- Stats Bar - Dynamique depuis Firebase -->
       <div class="stats-bar glass">
         <div class="stat-mini">
           <span class="stat-num">{{ signalements.length }}</span>
           <span class="stat-lbl">Total</span>
         </div>
-        <div class="stat-divider"></div>
-        <div class="stat-mini nouveau">
-          <span class="stat-num">{{ countByStatus('NOUVEAU') }}</span>
-          <span class="stat-lbl">Nouveau</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-mini en-cours">
-          <span class="stat-num">{{ countByStatus('EN_COURS') }}</span>
-          <span class="stat-lbl">En cours</span>
-        </div>
-        <div class="stat-divider"></div>
-        <div class="stat-mini termine">
-          <span class="stat-num">{{ countByStatus('TERMINE') }}</span>
-          <span class="stat-lbl">Termine</span>
-        </div>
+        <template v-for="statut in referentielsStore.statuts" :key="statut.id">
+          <div class="stat-divider"></div>
+          <div class="stat-mini">
+            <span class="stat-num" :style="{ color: statut.couleur }">{{ countByStatus(statut.code) }}</span>
+            <span class="stat-lbl">{{ statut.libelle.split(' ')[0] }}</span>
+          </div>
+        </template>
       </div>
 
       <!-- Locate Button -->
@@ -186,11 +174,13 @@ import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/v
 import 'leaflet/dist/leaflet.css';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
+import { useReferentielsStore } from '@/stores/referentiels';
 import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
 const signalementsStore = useSignalementsStore();
 const authStore = useAuthStore();
+const referentielsStore = useReferentielsStore();
 
 const mapRef = ref(null);
 const zoom = ref(13);
@@ -244,22 +234,14 @@ function goBack() {
   router.push('/home');
 }
 
-function getStatusColor(code: StatutCode): string {
-  const colors: Record<StatutCode, string> = {
-    NOUVEAU: '#f44336',
-    EN_COURS: '#FF9800',
-    TERMINE: '#4CAF50'
-  };
-  return colors[code] || '#999';
+function getStatusColor(code: string | undefined): string {
+  return referentielsStore.getColorByCode(code);
 }
 
-function getStatusLabel(code: StatutCode): string {
-  const labels: Record<StatutCode, string> = {
-    NOUVEAU: 'Nouveau',
-    EN_COURS: 'En cours',
-    TERMINE: 'Termine'
-  };
-  return labels[code] || code;
+function getStatusLabel(code: string | undefined): string {
+  if (!code) return 'Inconnu';
+  const statut = referentielsStore.getStatutByCode(code);
+  return statut?.libelle || code;
 }
 
 function formatDate(date: string): string {

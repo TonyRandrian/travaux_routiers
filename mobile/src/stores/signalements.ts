@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import type { Signalement, Stats, SignalementUtilisateur } from '@/types';
-import { STATUTS } from '@/types';
+import { useReferentielsStore } from '@/stores/referentiels';
 
 export const useSignalementsStore = defineStore('signalements', () => {
   const signalements = ref<Signalement[]>([]);
@@ -117,6 +117,10 @@ export const useSignalementsStore = defineStore('signalements', () => {
     try {
       const signalementsRef = collection(db, 'signalements');
       
+      // Récupérer le statut NOUVEAU depuis les référentiels
+      const referentielsStore = useReferentielsStore();
+      const statutNouveau = referentielsStore.getStatutByCode('NOUVEAU');
+      
       const newSignalement: Omit<Signalement, 'id'> = {
         titre: data.titre,
         description: data.description,
@@ -125,7 +129,7 @@ export const useSignalementsStore = defineStore('signalements', () => {
         surface_m2: data.surface_m2 || null,
         budget: data.budget || null,
         date_signalement: new Date().toISOString().split('T')[0],
-        statut: STATUTS[0], // NOUVEAU par défaut
+        statut: statutNouveau, // NOUVEAU par défaut depuis référentiels
         utilisateur: utilisateur,
         entreprise: entreprise ? {
           id: entreprise.id,

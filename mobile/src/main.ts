@@ -40,6 +40,7 @@ import './theme/variables.css';
 import 'leaflet/dist/leaflet.css';
 
 import { useAuthStore } from './stores/auth';
+import { useReferentielsStore } from './stores/referentiels';
 
 const pinia = createPinia();
 
@@ -51,6 +52,10 @@ const app = createApp(App)
 // Initialiser l'écouteur d'authentification Firebase
 const authStore = useAuthStore(pinia);
 authStore.initAuthListener();
+
+// Charger les référentiels (statuts, entreprises) depuis Firebase
+const referentielsStore = useReferentielsStore(pinia);
+referentielsStore.loadAll();
 
 router.isReady().then(() => {
   app.mount('#app');
