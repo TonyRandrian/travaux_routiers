@@ -104,7 +104,7 @@ export function AuthProvider({ children }) {
   }
 
   // Récupérer le profil utilisateur depuis Firestore
-  async function fetchUserProfile(uid) {
+  async function fetchUserProfile(uid, userInfo = {}) {
     try {
       const userDocRef = doc(db, 'users', uid);
       const userDoc = await getDoc(userDocRef);
@@ -116,8 +116,8 @@ export function AuthProvider({ children }) {
       // Si le document n'existe pas, créer un profil par défaut
       const defaultProfile = {
         uid: uid,
-        email: auth.currentUser?.email || '',
-        displayName: auth.currentUser?.displayName || 'Utilisateur',
+        email: userInfo.email || auth.currentUser?.email || '',
+        displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
         role: 'user',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -130,8 +130,8 @@ export function AuthProvider({ children }) {
       // En cas d'erreur (offline, etc.), créer un profil temporaire
       const tempProfile = {
         uid: uid,
-        email: auth.currentUser?.email || '',
-        displayName: auth.currentUser?.displayName || 'Utilisateur',
+        email: userInfo.email || auth.currentUser?.email || '',
+        displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
         role: 'user'
       };
       setUserProfile(tempProfile);
@@ -140,11 +140,12 @@ export function AuthProvider({ children }) {
   }
 
   useEffect(() => {
+    setLoading(true);
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         setCurrentUser(user);
         if (user) {
-          await fetchUserProfile(user.uid);
+          await fetchUserProfile(user.uid, { email: user.email, displayName: user.displayName });
         } else {
           setUserProfile(null);
         }
@@ -162,6 +163,7 @@ export function AuthProvider({ children }) {
   const value = {
     currentUser,
     userProfile,
+    loading,
     signup,
     login,
     logout,
