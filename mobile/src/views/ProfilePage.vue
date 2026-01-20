@@ -33,7 +33,8 @@
           <div class="form-group">
             <ion-label>Nom complet</ion-label>
             <ion-input
-              v-model="form.displayName"
+              :value="form.displayName"
+              @ion-input="form.displayName = $event.target.value"
               type="text"
               placeholder="Votre nom"
             ></ion-input>
@@ -42,7 +43,8 @@
           <div class="form-group">
             <ion-label>Téléphone</ion-label>
             <ion-input
-              v-model="form.phone"
+              :value="form.phone"
+              @ion-input="form.phone = $event.target.value"
               type="tel"
               placeholder="+261 34 00 000 00"
             ></ion-input>

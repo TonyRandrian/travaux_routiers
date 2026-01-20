@@ -69,44 +69,37 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Connexion avec gestion des tentatives
   async function login(email: string, password: string) {
+    loading.value = true;
+    error.value = null;
+    
     try {
-      error.value = null;
-
-      // Vérifier si l'utilisateur est bloqué avant de tenter la connexion
-      try {
-        const usersQuery = await getDoc(doc(db, 'usersByEmail', email.toLowerCase()));
-        if (usersQuery.exists()) {
-          const userData = usersQuery.data();
-          if (userData.bloque) {
-            error.value = 'Compte bloqué après 3 tentatives. Contactez un manager.';
-            throw new Error('Compte bloqué');
-          }
-        }
-      } catch (firestoreErr: any) {
-        // Ignorer les erreurs Firestore (permission denied, collection inexistante, etc.)
-        console.log('Vérification blocage ignorée:', firestoreErr.message);
+      // Vérifier que Firebase Auth est initialisé
+      if (!auth) {
+        throw new Error('Firebase Auth non configuré');
       }
 
-      // Tenter la connexion Firebase Auth
+      // Tenter la connexion Firebase Auth directement
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Réinitialiser les tentatives après connexion réussie
+      // Connexion réussie - réinitialiser les tentatives si possible
       try {
         const userDocRef = doc(db, 'users', userCredential.user.uid);
         await updateDoc(userDocRef, { tentatives: 0 });
       } catch (updateErr) {
-        // Ignorer si le document n'existe pas encore
+        // Ignorer si le document n'existe pas encore (nouvel utilisateur)
         console.log('Reset tentatives ignoré:', updateErr);
       }
 
+      // Charger le profil utilisateur
+      await fetchUserProfile(userCredential.user.uid);
+      
       return userCredential;
     } catch (err: any) {
-      // Incrémenter les tentatives en cas d'échec d'authentification
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        await incrementLoginAttempts(email);
-      }
-      error.value = error.value || getErrorMessage(err.code);
+      console.error('Erreur login:', err.code, err.message);
+      error.value = getErrorMessage(err.code);
       throw err;
+    } finally {
+      loading.value = false;
     }
   }
 

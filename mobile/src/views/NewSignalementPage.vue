@@ -169,6 +169,8 @@ import { locateOutline } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '@/config/firebase';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
 
@@ -179,14 +181,18 @@ const authStore = useAuthStore();
 const mapRef = ref(null);
 const mapZoom = ref(15);
 const mapCenter = ref<[number, number]>([-18.8792, 47.5079]);
+const loadingEntreprises = ref(true);
+const entreprisesFromFirebase = ref(false);
 
-// Liste des entreprises (correspondant à PostgreSQL)
-const entreprises = ref([
-  { id: 1, nom: 'COLAS Madagascar', contact: 'colas@example.mg' },
-  { id: 2, nom: 'SOGEA SATOM', contact: 'sogea@example.mg' },
-  { id: 3, nom: 'EIFFAGE Madagascar', contact: 'eiffage@example.mg' },
-  { id: 4, nom: 'ENTREPRISE GÉNÉRALE', contact: 'general@example.mg' }
-]);
+// Entreprises en dur pour les tests (fallback si Firebase indisponible)
+const ENTREPRISES_FALLBACK = [
+  { id: 1, nom: 'COLAS Madagascar (en dur)', contact: 'colas@example.mg' },
+  { id: 2, nom: 'SOGEA SATOM (en dur)', contact: 'sogea@example.mg' },
+  { id: 3, nom: 'EIFFAGE Madagascar (en dur)', contact: 'eiffage@example.mg' },
+  { id: 4, nom: 'ENTREPRISE GÉNÉRALE (en dur)', contact: 'general@example.mg' }
+];
+
+const entreprises = ref(ENTREPRISES_FALLBACK);
 
 const form = ref({
   titre: '',
@@ -209,8 +215,42 @@ const isFormValid = computed(() => {
 });
 
 onMounted(async () => {
-  await useCurrentLocation();
+  await Promise.all([
+    useCurrentLocation(),
+    loadEntreprises()
+  ]);
 });
+
+// Charger les entreprises depuis Firebase, fallback sur les données en dur
+async function loadEntreprises() {
+  loadingEntreprises.value = true;
+  try {
+    const entreprisesRef = collection(db, 'entreprises');
+    const snapshot = await getDocs(entreprisesRef);
+    
+    if (!snapshot.empty) {
+      entreprises.value = snapshot.docs.map(doc => ({
+        id: doc.data().id || parseInt(doc.id),
+        nom: doc.data().nom,
+        contact: doc.data().contact
+      }));
+      entreprisesFromFirebase.value = true;
+      console.log('Entreprises chargées depuis Firebase:', entreprises.value.length);
+    } else {
+      // Collection vide, utiliser fallback
+      console.log('Collection entreprises vide, utilisation des données en dur');
+      entreprises.value = ENTREPRISES_FALLBACK;
+      entreprisesFromFirebase.value = false;
+    }
+  } catch (err) {
+    console.error('Erreur chargement entreprises Firebase:', err);
+    // Fallback sur les données en dur
+    entreprises.value = ENTREPRISES_FALLBACK;
+    entreprisesFromFirebase.value = false;
+  } finally {
+    loadingEntreprises.value = false;
+  }
+}
 
 async function useCurrentLocation() {
   try {

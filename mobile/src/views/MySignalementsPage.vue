@@ -144,9 +144,13 @@ const selectedSignalement = ref<Signalement | null>(null);
 
 const mySignalements = computed(() => {
   if (!authStore.currentUser) return [];
-  return signalementsStore.signalements.filter(
-    s => s.id_utilisateur === authStore.currentUser!.uid
-  );
+  const userEmail = authStore.currentUser.email?.toLowerCase();
+  return signalementsStore.signalements.filter(s => {
+    // Support nouvelle structure (utilisateur.email) ET ancienne (id_utilisateur)
+    const signalementEmail = s.utilisateur?.email?.toLowerCase();
+    const oldUserId = (s as any).id_utilisateur;
+    return signalementEmail === userEmail || oldUserId === authStore.currentUser!.uid;
+  });
 });
 
 onMounted(() => {

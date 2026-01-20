@@ -35,7 +35,8 @@
             <div class="input-group">
               <ion-icon :icon="mailOutline" class="input-icon"></ion-icon>
               <ion-input
-                v-model="email"
+                :value="email"
+                @ion-input="email = $event.target.value"
                 type="email"
                 placeholder="Email"
                 class="modern-input"
@@ -45,7 +46,8 @@
             <div class="input-group">
               <ion-icon :icon="lockClosedOutline" class="input-icon"></ion-icon>
               <ion-input
-                v-model="password"
+                :value="password"
+                @ion-input="password = $event.target.value"
                 :type="showPassword ? 'text' : 'password'"
                 placeholder="Mot de passe"
                 class="modern-input"
