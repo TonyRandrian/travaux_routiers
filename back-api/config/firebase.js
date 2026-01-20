@@ -1,4 +1,6 @@
 const admin = require('firebase-admin');
+const path = require('path');
+const fs = require('fs');
 
 // Configuration Firebase Admin SDK
 // Le fichier de credentials peut être fourni via variable d'environnement ou fichier
@@ -16,15 +18,24 @@ const initializeFirebase = () => {
       firebaseApp = admin.initializeApp({
         credential: admin.credential.cert(serviceAccount)
       });
-      console.log('Firebase Admin initialisé via variable d\'environnement');
+      console.log('✓ Firebase Admin initialisé via variable d\'environnement');
     }
     // Option 2: Via fichier de credentials
     else if (process.env.FIREBASE_CREDENTIALS_PATH) {
-      const serviceAccount = require(process.env.FIREBASE_CREDENTIALS_PATH);
-      firebaseApp = admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
-      });
-      console.log('Firebase Admin initialisé via fichier de credentials');
+      // Résoudre le chemin depuis la racine du projet (un niveau au-dessus de config/)
+      const projectRoot = path.resolve(__dirname, '..');
+      const credentialsPath = path.resolve(projectRoot, process.env.FIREBASE_CREDENTIALS_PATH);
+      
+      if (fs.existsSync(credentialsPath)) {
+        const serviceAccount = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+        firebaseApp = admin.initializeApp({
+          credential: admin.credential.cert(serviceAccount)
+        });
+        console.log('✓ Firebase Admin initialisé via fichier de credentials');
+      } else {
+        console.warn(`⚠️ Fichier Firebase credentials non trouvé: ${credentialsPath}`);
+        return null;
+      }
     }
     // Option 3: Configuration par défaut (variables d'environnement individuelles)
     else if (process.env.FIREBASE_PROJECT_ID) {
@@ -35,7 +46,7 @@ const initializeFirebase = () => {
           privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
         })
       });
-      console.log('Firebase Admin initialisé via variables individuelles');
+      console.log('✓ Firebase Admin initialisé via variables individuelles');
     }
     else {
       console.warn('⚠️ Firebase non configuré - synchronisation désactivée');
@@ -44,7 +55,7 @@ const initializeFirebase = () => {
 
     return firebaseApp;
   } catch (error) {
-    console.error('Erreur initialisation Firebase Admin:', error.message);
+    console.error('❌ Erreur initialisation Firebase Admin:', error.message);
     return null;
   }
 };

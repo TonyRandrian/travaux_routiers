@@ -34,7 +34,7 @@ function generateRefreshToken(user) {
 /**
  * Middleware de vérification du token JWT
  */
-function authenticateToken(req, res, next) {
+async function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
@@ -45,23 +45,60 @@ function authenticateToken(req, res, next) {
     });
   }
 
-  jwt.verify(token, config.auth.jwtSecret, (err, decoded) => {
-    if (err) {
-      if (err.name === 'TokenExpiredError') {
-        return res.status(401).json({ 
-          error: 'Session expirée. Veuillez vous reconnecter.',
-          code: 'TOKEN_EXPIRED',
-          expiredAt: err.expiredAt
-        });
-      }
-      return res.status(403).json({ 
-        error: 'Token invalide',
-        code: 'TOKEN_INVALID'
+  // 1) Essayer de vérifier un JWT généré par le backend
+  try {
+    const decoded = jwt.verify(token, config.auth.jwtSecret);
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ 
+        error: 'Session expirée. Veuillez vous reconnecter.',
+        code: 'TOKEN_EXPIRED',
+        expiredAt: err.expiredAt
       });
     }
-    req.user = decoded;
-    next();
-  });
+    // Sinon, essayer comme token Firebase
+  }
+
+  // 2) Essayer de vérifier comme Firebase ID Token
+  try {
+    const { admin } = require('../config/firebase');
+    if (!admin || !admin.auth) {
+      return res.status(503).json({ error: 'Firebase non configuré sur le serveur' });
+    }
+
+    const decodedFirebase = await admin.auth().verifyIdToken(token);
+    const userEmail = decodedFirebase.email;
+
+    if (!userEmail) {
+      return res.status(403).json({ error: 'Token Firebase invalide (email manquant)', code: 'TOKEN_INVALID' });
+    }
+
+    // Rechercher l'utilisateur en base par email
+    const userResult = await pool.query(`
+      SELECT u.id, u.email, r.code as role_code, r.libelle as role
+      FROM utilisateur u
+      LEFT JOIN role r ON u.id_role = r.id
+      WHERE u.email = $1
+    `, [userEmail]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Utilisateur non trouvé. Veuillez créer un compte.' });
+    }
+
+    const user = userResult.rows[0];
+    req.user = {
+      id: user.id,
+      email: user.email,
+      role: user.role_code || user.role || 'USER'
+    };
+
+    return next();
+  } catch (fbErr) {
+    console.error('Erreur vérification token:', fbErr && fbErr.message ? fbErr.message : fbErr);
+    return res.status(403).json({ error: 'Token invalide', code: 'TOKEN_INVALID' });
+  }
 }
 
 /**
