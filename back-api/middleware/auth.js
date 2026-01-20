@@ -1,5 +1,13 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/config');
+const pool = require('../config/database');
+
+// Constantes des rôles
+const ROLES = {
+  VISITEUR: 'VISITEUR',
+  USER: 'USER',
+  MANAGER: 'MANAGER'
+};
 
 /**
  * Génère un token d'accès JWT
@@ -105,12 +113,87 @@ async function authenticateToken(req, res, next) {
  * Middleware pour vérifier le rôle Manager
  */
 function requireManager(req, res, next) {
-  if (req.user.role !== 'MANAGER') {
+  if (req.user.role !== ROLES.MANAGER) {
     return res.status(403).json({ 
       error: 'Accès refusé. Rôle Manager requis.',
       code: 'MANAGER_REQUIRED'
     });
   }
+  next();
+}
+
+/**
+ * Middleware pour vérifier que l'utilisateur est au moins connecté (USER ou MANAGER)
+ */
+function requireUser(req, res, next) {
+  if (req.user.role !== ROLES.USER && req.user.role !== ROLES.MANAGER) {
+    return res.status(403).json({ 
+      error: 'Accès refusé. Connexion requise.',
+      code: 'USER_REQUIRED'
+    });
+  }
+  next();
+}
+
+/**
+ * Middleware optionnel d'authentification pour les visiteurs
+ * Permet l'accès même sans token, mais enrichit req.user si un token est présent
+ */
+async function optionalAuth(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  // Si pas de token, continuer en mode visiteur
+  if (!token) {
+    req.user = { role: ROLES.VISITEUR, isVisitor: true };
+    return next();
+  }
+
+  // Essayer de vérifier le token JWT
+  try {
+    const decoded = jwt.verify(token, config.auth.jwtSecret);
+    req.user = decoded;
+    return next();
+  } catch (err) {
+    // Si le token est expiré ou invalide, continuer en mode visiteur
+    if (err.name === 'TokenExpiredError' || err.name === 'JsonWebTokenError') {
+      req.user = { role: ROLES.VISITEUR, isVisitor: true };
+      return next();
+    }
+  }
+
+  // Essayer Firebase
+  try {
+    const { admin } = require('../config/firebase');
+    if (admin && admin.auth) {
+      const decodedFirebase = await admin.auth().verifyIdToken(token);
+      const userEmail = decodedFirebase.email;
+
+      if (userEmail) {
+        const userResult = await pool.query(`
+          SELECT u.id, u.email, r.code as role_code, r.libelle as role
+          FROM utilisateur u
+          LEFT JOIN role r ON u.id_role = r.id
+          WHERE u.email = $1
+        `, [userEmail]);
+
+        if (userResult.rows.length > 0) {
+          const user = userResult.rows[0];
+          req.user = {
+            id: user.id,
+            email: user.email,
+            role: user.role_code || ROLES.USER
+          };
+          return next();
+        }
+      }
+    }
+  } catch (fbErr) {
+    // Ignorer les erreurs Firebase et continuer en mode visiteur
+  }
+
+  // Par défaut, mode visiteur
+  req.user = { role: ROLES.VISITEUR, isVisitor: true };
   next();
 }
 
@@ -132,9 +215,12 @@ function verifyRefreshToken(token) {
 }
 
 module.exports = {
+  ROLES,
   generateAccessToken,
   generateRefreshToken,
   authenticateToken,
+  optionalAuth,
   requireManager,
+  requireUser,
   verifyRefreshToken
 };

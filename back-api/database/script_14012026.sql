@@ -13,6 +13,7 @@ CREATE TABLE utilisateur (
     id_role INT REFERENCES role(id),
     tentatives INT DEFAULT 0,
     bloque BOOLEAN DEFAULT FALSE,
+    firebase_uid VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

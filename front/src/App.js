@@ -5,16 +5,70 @@ import MapComponent from './components/MapComponent';
 import Dashboard from './components/Dashboard/Dashboard';
 import ManagerPanel from './components/Manager/ManagerPanel';
 import config from './config/config';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { AuthProvider, useAuth, ROLES } from './contexts/AuthContext';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import ForgotPassword from './components/Auth/ForgotPassword';
 import UserProfile from './components/Profile/UserProfile';
 
-// Protected Route Component
+// Protected Route Component (pour les utilisateurs connectés)
+// Seuls les VISITEURS et MANAGERS ont accès au web
+// Les USER (utilisateurs simples) doivent utiliser l'app mobile
 function ProtectedRoute({ children }) {
-  const { currentUser } = useAuth();
-  return currentUser ? children : <Navigate to="/" replace />;
+  const { currentUser, isVisitor, userProfile } = useAuth();
+  
+  // Si mode visiteur activé, autoriser
+  if (isVisitor) {
+    return children;
+  }
+  
+  // Si pas connecté, rediriger vers login
+  if (!currentUser && !userProfile) {
+    return <Navigate to="/" replace />;
+  }
+  
+  // Si connecté, vérifier le rôle
+  const role = userProfile?.role;
+  
+  // Seuls VISITEUR et MANAGER peuvent accéder au web
+  if (role === ROLES.USER) {
+    // Les utilisateurs simples sont redirigés vers une page d'accès refusé
+    return <Navigate to="/access-denied" replace />;
+  }
+  
+  return children;
+}
+
+// Page d'accès refusé pour les utilisateurs mobiles
+function AccessDeniedPage() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+  
+  return (
+    <div className="access-denied-container">
+      <div className="access-denied-card">
+        <div className="access-denied-icon">📱</div>
+        <h2>Accès réservé</h2>
+        <p>
+          Votre compte est de type <strong>Utilisateur</strong>.<br />
+          L'accès au site web est réservé aux <strong>Managers</strong> et aux <strong>Visiteurs</strong>.
+        </p>
+        <p className="mobile-hint">
+          Veuillez utiliser l'<strong>application mobile</strong> pour signaler et suivre les travaux routiers.
+        </p>
+        <div className="access-denied-actions">
+          <button className="back-btn" onClick={handleLogout}>
+            ← Retour à la connexion
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Main Application Component
@@ -26,7 +80,8 @@ function MainApp() {
   const [stats, setStats] = useState({});
   const [loadingStats, setLoadingStats] = useState(true);
   const [viewMode, setViewMode] = useState('map'); // 'map' or 'dashboard'
-  const { userProfile } = useAuth();
+  const { userProfile, isVisitor, logout, exitVisitorMode } = useAuth();
+  const navigate = useNavigate();
 
   // Charger les signalements depuis l'API
   const fetchSignalements = async () => {
@@ -72,7 +127,20 @@ function MainApp() {
   };
 
   // Vérifier si l'utilisateur est manager
-  const isManager = userProfile?.role === 'manager' || userProfile?.role === 'MANAGER';
+  const isManager = userProfile?.role === ROLES.MANAGER;
+  
+  // Vérifier si l'utilisateur est un visiteur
+  const isVisitorMode = isVisitor || userProfile?.role === ROLES.VISITEUR || userProfile?.isVisitor;
+
+  // Gérer la déconnexion ou sortie mode visiteur
+  const handleLogoutOrExit = async () => {
+    if (isVisitorMode) {
+      exitVisitorMode();
+    } else {
+      await logout();
+    }
+    navigate('/', { replace: true });
+  };
 
   return (
     <div className="App">
@@ -91,13 +159,22 @@ function MainApp() {
                 🔧 Panel Manager
               </button>
             )}
-            <button className="user-button" onClick={() => setShowProfile(true)}>
-              <span className="user-avatar">
-                {userProfile?.displayName?.charAt(0)?.toUpperCase() || 'U'}
-              </span>
-              <span className="user-name">{userProfile?.displayName || 'Utilisateur'}</span>
-              {isManager && <span className="role-badge">Manager</span>}
-            </button>
+            {isVisitorMode ? (
+              <button className="visitor-btn" onClick={handleLogoutOrExit}>
+                <span className="visitor-icon">👁️</span>
+                <span>Mode Visiteur</span>
+                <span className="exit-hint">Se connecter</span>
+              </button>
+            ) : (
+              <button className="user-button" onClick={() => setShowProfile(true)}>
+                <span className="user-avatar">
+                  {userProfile?.displayName?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
+                <span className="user-name">{userProfile?.displayName || 'Utilisateur'}</span>
+                {isManager && <span className="role-badge manager">Manager</span>}
+                {userProfile?.role === ROLES.USER && <span className="role-badge user">Utilisateur</span>}
+              </button>
+            )}
           </div>
         </div>
         <div className="header-info">
@@ -119,9 +196,12 @@ function MainApp() {
               📊 Récapitulatif
             </button>
           </div>
-          <button className="refresh-btn" onClick={() => { fetchSignalements(); fetchStats(); }}>
-            🔄 Actualiser
-          </button>
+          {/* Bouton Synchroniser visible uniquement pour le Manager */}
+          {isManager && (
+            <button className="refresh-btn" onClick={() => { fetchSignalements(); fetchStats(); }}>
+              🔄 Synchroniser
+            </button>
+          )}
         </div>
       </header>
       
@@ -145,7 +225,7 @@ function MainApp() {
         )}
       </main>
 
-      {showProfile && (
+      {showProfile && !isVisitorMode && (
         <UserProfile onClose={() => setShowProfile(false)} />
       )}
 
@@ -159,11 +239,11 @@ function MainApp() {
 // Auth Pages with redirect
 function LoginPage() {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, isVisitor } = useAuth();
 
   // Déconnecter l'utilisateur s'il est déjà connecté pour forcer la reconnexion
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !isVisitor) {
       logout();
     }
   }, []);
@@ -172,11 +252,16 @@ function LoginPage() {
     navigate('/app', { replace: true });
   };
 
+  const handleVisitorMode = () => {
+    navigate('/app', { replace: true });
+  };
+
   return (
     <Login 
       onSwitchToRegister={() => navigate('/register')}
       onForgotPassword={() => navigate('/forgot-password')}
       onLoginSuccess={handleLoginSuccess}
+      onVisitorMode={handleVisitorMode}
     />
   );
 }
@@ -218,6 +303,7 @@ function AppContent() {
         <Route path="/" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/access-denied" element={<AccessDeniedPage />} />
         <Route 
           path="/app" 
           element={

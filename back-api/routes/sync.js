@@ -189,14 +189,55 @@ router.post('/all', authenticateToken, requireManager, async (req, res) => {
     const totalImported = results.fromFirestore?.imported || 0;
     const totalExported = results.toFirestore?.exported || 0;
     const totalUpdated = (results.fromFirestore?.updated || 0) + (results.toFirestore?.updated || 0);
+    const usersImported = results.users?.imported || 0;
+    const usersExported = results.users?.exported || 0;
 
     res.json({
       success: true,
-      message: `Synchronisation complète terminée: ${totalImported} importés, ${totalExported} exportés, ${totalUpdated} mis à jour`,
+      message: `Synchronisation complète terminée: ${totalImported} importés, ${totalExported} exportés, ${totalUpdated} mis à jour, ${usersImported + usersExported} utilisateurs synchronisés`,
       results
     });
   } catch (error) {
     console.error('Erreur sync all:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sync/users:
+ *   post:
+ *     summary: Synchroniser les utilisateurs entre Firebase et PostgreSQL (Manager uniquement)
+ *     tags: [Synchronisation]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Résultat de la synchronisation des utilisateurs
+ *       401:
+ *         description: Non authentifié
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       503:
+ *         description: Firebase non configuré
+ */
+router.post('/users', authenticateToken, requireManager, async (req, res) => {
+  try {
+    if (!SyncService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Firebase non configuré',
+        message: 'Veuillez configurer les credentials Firebase dans les variables d\'environnement'
+      });
+    }
+
+    const results = await SyncService.syncUsers();
+    res.json({
+      success: true,
+      message: `Synchronisation utilisateurs terminée: ${results.imported} importés, ${results.exported} exportés`,
+      results
+    });
+  } catch (error) {
+    console.error('Erreur sync users:', error);
     res.status(500).json({ error: error.message });
   }
 });

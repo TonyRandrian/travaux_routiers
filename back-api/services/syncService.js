@@ -1,8 +1,10 @@
 const pool = require('../config/database');
 const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+const bcrypt = require('bcryptjs');
 
 // Collection Firestore pour les signalements
 const SIGNALEMENTS_COLLECTION = 'signalements';
+const USERS_COLLECTION = 'users';
 const SYNC_META_COLLECTION = 'sync_metadata';
 
 /**
@@ -272,6 +274,7 @@ class SyncService {
     const results = {
       fromFirestore: null,
       toFirestore: null,
+      users: null,
       timestamp: new Date().toISOString()
     };
 
@@ -289,7 +292,130 @@ class SyncService {
       results.toFirestore = { error: error.message };
     }
 
+    // 3. Synchroniser les utilisateurs
+    try {
+      results.users = await this.syncUsers();
+    } catch (error) {
+      results.users = { error: error.message };
+    }
+
     return results;
+  }
+
+  /**
+   * Synchroniser les utilisateurs entre Firebase et PostgreSQL
+   */
+  static async syncUsers() {
+    if (!this.isAvailable()) {
+      throw new Error('Firebase non configuré');
+    }
+
+    const db = getFirestore();
+    const results = {
+      imported: 0,
+      exported: 0,
+      errors: [],
+      details: []
+    };
+
+    try {
+      // 1. Récupérer les utilisateurs de Firestore
+      const snapshot = await db.collection(USERS_COLLECTION).get();
+      
+      // Récupérer le rôle USER par défaut
+      const roleResult = await pool.query(`SELECT id FROM role WHERE code = 'USER'`);
+      const defaultRoleId = roleResult.rows[0]?.id || 2;
+
+      for (const doc of snapshot.docs) {
+        try {
+          const firestoreUser = doc.data();
+          const firebaseUid = doc.id;
+          const email = firestoreUser.email;
+
+          if (!email) continue;
+
+          // Vérifier si l'utilisateur existe déjà dans PostgreSQL
+          const existingResult = await pool.query(
+            'SELECT id FROM utilisateur WHERE email = $1',
+            [email]
+          );
+
+          if (existingResult.rows.length === 0) {
+            // Créer l'utilisateur dans PostgreSQL
+            // Générer un mot de passe par défaut hashé (l'utilisateur utilise Firebase pour se connecter)
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash('firebase_user_' + firebaseUid.substring(0, 8), salt);
+            
+            const displayName = firestoreUser.displayName || '';
+            const nameParts = displayName.split(' ');
+            const prenom = nameParts[0] || '';
+            const nom = nameParts.slice(1).join(' ') || '';
+
+            await pool.query(`
+              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid)
+              VALUES ($1, $2, $3, $4, $5, $6)
+            `, [email, hashedPassword, nom, prenom, defaultRoleId, firebaseUid]);
+
+            results.imported++;
+            results.details.push({
+              action: 'imported',
+              email: email,
+              source: 'firebase'
+            });
+          }
+        } catch (userError) {
+          results.errors.push({
+            email: doc.data().email,
+            error: userError.message
+          });
+        }
+      }
+
+      // 2. Exporter les utilisateurs PostgreSQL vers Firestore (sauf ceux déjà liés)
+      const pgUsers = await pool.query(`
+        SELECT u.*, r.code as role_code 
+        FROM utilisateur u
+        LEFT JOIN role r ON u.id_role = r.id
+        WHERE u.firebase_uid IS NULL
+      `);
+
+      for (const user of pgUsers.rows) {
+        try {
+          // Créer un document dans Firestore pour référence
+          const userDocRef = db.collection(USERS_COLLECTION).doc(`pg_${user.id}`);
+          await userDocRef.set({
+            email: user.email,
+            displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+            role: user.role_code || 'USER',
+            pg_id: user.id,
+            createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
+            syncedFromServer: true
+          }, { merge: true });
+
+          // Mettre à jour le firebase_uid dans PostgreSQL
+          await pool.query(
+            'UPDATE utilisateur SET firebase_uid = $1 WHERE id = $2',
+            [`pg_${user.id}`, user.id]
+          );
+
+          results.exported++;
+          results.details.push({
+            action: 'exported',
+            email: user.email,
+            source: 'postgresql'
+          });
+        } catch (exportError) {
+          results.errors.push({
+            email: user.email,
+            error: exportError.message
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      throw new Error(`Erreur synchronisation utilisateurs: ${error.message}`);
+    }
   }
 
   /**
