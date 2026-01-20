@@ -9,6 +9,11 @@ const swaggerSpec = require('./config/swagger');
 // Import des routes
 const signalementsRoutes = require('./routes/signalements');
 const utilisateursRoutes = require('./routes/utilisateurs');
+const syncRoutes = require('./routes/sync');
+
+// Initialiser Firebase (optionnel)
+const { initializeFirebase, isFirebaseAvailable } = require('./config/firebase');
+initializeFirebase();
 
 const app = express();
 
@@ -31,6 +36,7 @@ app.get('/api-docs.json', (req, res) => {
 // Routes API
 app.use('/api/signalements', signalementsRoutes);
 app.use('/api/utilisateurs', utilisateursRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Routes de base
 /**
@@ -49,9 +55,11 @@ app.get('/', (req, res) => {
     environment: config.server.env,
     version: '1.0.0',
     documentation: '/api-docs',
+    firebaseSync: isFirebaseAvailable() ? 'enabled' : 'disabled',
     endpoints: {
       signalements: '/api/signalements',
       utilisateurs: '/api/utilisateurs',
+      sync: '/api/sync',
       health: '/health',
       docs: '/api-docs'
     }

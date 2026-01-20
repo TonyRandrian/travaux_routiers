@@ -4,3 +4,5 @@ docker compose run --rm tile-server import
 Commandes pour le hot-reload : 
 docker-compose down
 docker-compose up --build
+
+- créer table configuration

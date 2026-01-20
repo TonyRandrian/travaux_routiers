@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import config from '../../config/config';
+import { useAuth } from '../../contexts/AuthContext';
 import './ManagerPanel.css';
 
 const ManagerPanel = ({ onClose }) => {
@@ -12,12 +13,18 @@ const ManagerPanel = ({ onClose }) => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [editingSignalement, setEditingSignalement] = useState(null);
   const [syncStatus, setSyncStatus] = useState('');
+  const [syncResults, setSyncResults] = useState(null);
+  const [lastSyncInfo, setLastSyncInfo] = useState(null);
+  const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     fetchBlockedUsers();
     fetchSignalements();
     fetchStatuts();
     fetchEntreprises();
+    checkSyncStatus();
   }, []);
 
   const showMessage = (type, text) => {
@@ -111,20 +118,119 @@ const ManagerPanel = ({ onClose }) => {
 
   const handleSync = async () => {
     setSyncStatus('syncing');
+    setSyncResults(null);
+    
     try {
-      // Simuler la synchronisation avec Firebase
-      // Dans une vraie implémentation, cela synchroniserait avec Firestore
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Récupérer le token d'authentification
+      const token = await currentUser?.getIdToken();
       
-      setSyncStatus('success');
-      showMessage('success', 'Synchronisation terminée avec succès');
-      fetchSignalements();
+      // Appeler l'API de synchronisation bidirectionnelle
+      const response = await fetch(`${config.api.baseUrl}/api/sync/all`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSyncStatus('success');
+        setSyncResults(data.results);
+        showMessage('success', data.message || 'Synchronisation terminée avec succès');
+        fetchSignalements();
+        checkSyncStatus();
+      } else if (response.status === 503) {
+        setSyncStatus('unavailable');
+        showMessage('warning', 'Firebase non configuré sur le serveur');
+      } else {
+        setSyncStatus('error');
+        showMessage('error', data.error || 'Erreur lors de la synchronisation');
+      }
+      
+      setTimeout(() => setSyncStatus(''), 5000);
+    } catch (err) {
+      setSyncStatus('error');
+      showMessage('error', 'Erreur de connexion au serveur');
+      setTimeout(() => setSyncStatus(''), 3000);
+    }
+  };
+
+  // Synchroniser uniquement depuis Firestore (récupérer les signalements mobiles)
+  const handleSyncFromFirestore = async () => {
+    setSyncStatus('syncing');
+    try {
+      const token = await currentUser?.getIdToken();
+      const response = await fetch(`${config.api.baseUrl}/api/sync/from-firestore`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSyncStatus('success');
+        setSyncResults({ fromFirestore: data.results });
+        showMessage('success', `${data.results.imported} signalement(s) importé(s) depuis Firebase`);
+        fetchSignalements();
+      } else {
+        setSyncStatus('error');
+        showMessage('error', data.error || 'Erreur lors de l\'import');
+      }
       
       setTimeout(() => setSyncStatus(''), 3000);
     } catch (err) {
       setSyncStatus('error');
-      showMessage('error', 'Erreur lors de la synchronisation');
+      showMessage('error', 'Erreur de connexion');
       setTimeout(() => setSyncStatus(''), 3000);
+    }
+  };
+
+  // Synchroniser uniquement vers Firestore (envoyer les mises à jour)
+  const handleSyncToFirestore = async () => {
+    setSyncStatus('syncing');
+    try {
+      const token = await currentUser?.getIdToken();
+      const response = await fetch(`${config.api.baseUrl}/api/sync/to-firestore`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        setSyncStatus('success');
+        setSyncResults({ toFirestore: data.results });
+        showMessage('success', `${data.results.exported} exporté(s), ${data.results.updated} mis à jour vers Firebase`);
+      } else {
+        setSyncStatus('error');
+        showMessage('error', data.error || 'Erreur lors de l\'export');
+      }
+      
+      setTimeout(() => setSyncStatus(''), 3000);
+    } catch (err) {
+      setSyncStatus('error');
+      showMessage('error', 'Erreur de connexion');
+      setTimeout(() => setSyncStatus(''), 3000);
+    }
+  };
+
+  // Vérifier le statut de la synchronisation
+  const checkSyncStatus = async () => {
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/sync/status`);
+      const data = await response.json();
+      setFirebaseAvailable(data.available);
+      setLastSyncInfo(data.lastSync);
+    } catch (err) {
+      setFirebaseAvailable(false);
     }
   };
 
@@ -273,30 +379,113 @@ const ManagerPanel = ({ onClose }) => {
           {/* Onglet Synchronisation */}
           {activeTab === 'sync' && (
             <div className="sync-section">
-              <h3>Synchronisation Firebase</h3>
-              <div className="sync-card">
-                <div className="sync-icon">
-                  {syncStatus === 'syncing' ? '⏳' : syncStatus === 'success' ? '✅' : syncStatus === 'error' ? '❌' : '🔄'}
-                </div>
-                <p>
-                  Synchronisez les signalements entre la base locale et Firebase pour permettre l'affichage sur mobile.
-                </p>
-                <button 
-                  className={`sync-btn ${syncStatus}`}
-                  onClick={handleSync}
-                  disabled={syncStatus === 'syncing'}
-                >
-                  {syncStatus === 'syncing' ? 'Synchronisation en cours...' : 'Lancer la synchronisation'}
-                </button>
-              </div>
+              <h3>Synchronisation Firebase ↔ PostgreSQL</h3>
               
+              {/* Statut Firebase */}
+              <div className={`firebase-status ${firebaseAvailable ? 'available' : 'unavailable'}`}>
+                <span className="status-indicator"></span>
+                <span>Firebase: {firebaseAvailable ? 'Connecté' : 'Non configuré'}</span>
+              </div>
+
+              {/* Dernière synchronisation */}
+              {lastSyncInfo && (
+                <div className="last-sync-info">
+                  <strong>Dernière synchronisation:</strong> {new Date(lastSyncInfo.timestamp).toLocaleString('fr-FR')}
+                  <br />
+                  <small>Exportés: {lastSyncInfo.exported} | Mis à jour: {lastSyncInfo.updated} | Total: {lastSyncInfo.total}</small>
+                </div>
+              )}
+
+              {/* Boutons de synchronisation */}
+              <div className="sync-actions">
+                <div className="sync-card main-sync">
+                  <div className="sync-icon">
+                    {syncStatus === 'syncing' ? '⏳' : syncStatus === 'success' ? '✅' : syncStatus === 'error' ? '❌' : '🔄'}
+                  </div>
+                  <h4>Synchronisation Complète</h4>
+                  <p>Synchronisation bidirectionnelle entre PostgreSQL et Firestore</p>
+                  <button 
+                    className={`sync-btn primary ${syncStatus}`}
+                    onClick={handleSync}
+                    disabled={syncStatus === 'syncing' || !firebaseAvailable}
+                  >
+                    {syncStatus === 'syncing' ? 'Synchronisation en cours...' : '🔄 Synchroniser tout'}
+                  </button>
+                </div>
+
+                <div className="sync-row">
+                  <div className="sync-card">
+                    <div className="sync-icon">📥</div>
+                    <h4>Import depuis Firebase</h4>
+                    <p>Récupérer les signalements créés depuis l'app mobile</p>
+                    <button 
+                      className="sync-btn secondary"
+                      onClick={handleSyncFromFirestore}
+                      disabled={syncStatus === 'syncing' || !firebaseAvailable}
+                    >
+                      📥 Importer
+                    </button>
+                  </div>
+
+                  <div className="sync-card">
+                    <div className="sync-icon">📤</div>
+                    <h4>Export vers Firebase</h4>
+                    <p>Envoyer les mises à jour vers l'app mobile</p>
+                    <button 
+                      className="sync-btn secondary"
+                      onClick={handleSyncToFirestore}
+                      disabled={syncStatus === 'syncing' || !firebaseAvailable}
+                    >
+                      📤 Exporter
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Résultats de la synchronisation */}
+              {syncResults && (
+                <div className="sync-results">
+                  <h4>📊 Résultats de la dernière synchronisation</h4>
+                  {syncResults.fromFirestore && (
+                    <div className="result-section">
+                      <strong>Import depuis Firestore:</strong>
+                      <ul>
+                        <li>✅ Importés: {syncResults.fromFirestore.imported || 0}</li>
+                        <li>🔄 Mis à jour: {syncResults.fromFirestore.updated || 0}</li>
+                        {syncResults.fromFirestore.errors?.length > 0 && (
+                          <li>❌ Erreurs: {syncResults.fromFirestore.errors.length}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                  {syncResults.toFirestore && (
+                    <div className="result-section">
+                      <strong>Export vers Firestore:</strong>
+                      <ul>
+                        <li>✅ Exportés: {syncResults.toFirestore.exported || 0}</li>
+                        <li>🔄 Mis à jour: {syncResults.toFirestore.updated || 0}</li>
+                        {syncResults.toFirestore.errors?.length > 0 && (
+                          <li>❌ Erreurs: {syncResults.toFirestore.errors.length}</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Informations */}
               <div className="sync-info">
-                <h4>Informations</h4>
+                <h4>ℹ️ Informations</h4>
                 <ul>
-                  <li>📥 Récupérer les signalements depuis Firebase</li>
-                  <li>📤 Envoyer les mises à jour vers Firebase</li>
-                  <li>🔄 Synchroniser les statuts et budgets</li>
+                  <li>📥 <strong>Import:</strong> Récupère les nouveaux signalements créés depuis l'app mobile</li>
+                  <li>📤 <strong>Export:</strong> Envoie les statuts, budgets et entreprises vers l'app mobile</li>
+                  <li>🔄 <strong>Sync complète:</strong> Effectue les deux opérations</li>
                 </ul>
+                {!firebaseAvailable && (
+                  <div className="warning-box">
+                    ⚠️ Firebase n'est pas configuré sur le serveur. Contactez l'administrateur pour configurer les credentials Firebase.
+                  </div>
+                )}
               </div>
             </div>
           )}
