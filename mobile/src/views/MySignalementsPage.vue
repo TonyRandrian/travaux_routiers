@@ -35,14 +35,14 @@
           @click="openDetail(signalement)"
           detail
         >
-          <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut_code) }" slot="start"></div>
+          <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut?.code) }" slot="start"></div>
           <ion-label>
             <h2>{{ signalement.titre || 'Sans titre' }}</h2>
             <p>{{ signalement.description || 'Aucune description' }}</p>
             <div class="item-meta">
               <span class="meta-item">📅 {{ formatDate(signalement.date_signalement) }}</span>
-              <span class="meta-item status" :style="{ color: getStatusColor(signalement.statut_code) }">
-                {{ getStatusLabel(signalement.statut_code) }}
+              <span class="meta-item status" :style="{ color: getStatusColor(signalement.statut?.code) }">
+                {{ signalement.statut?.libelle || 'Inconnu' }}
               </span>
             </div>
           </ion-label>
@@ -79,8 +79,8 @@
             </div>
             <div class="detail-item">
               <span class="detail-label">🔖 Statut</span>
-              <span class="detail-value status-badge" :style="{ background: getStatusColor(selectedSignalement.statut_code) }">
-                {{ getStatusLabel(selectedSignalement.statut_code) }}
+              <span class="detail-value status-badge" :style="{ background: getStatusColor(selectedSignalement.statut?.code) }">
+                {{ selectedSignalement.statut?.libelle || 'Inconnu' }}
               </span>
             </div>
             <div class="detail-item">
@@ -93,7 +93,7 @@
             </div>
             <div class="detail-item full-width">
               <span class="detail-label">🏢 Entreprise</span>
-              <span class="detail-value">{{ selectedSignalement.entreprise || 'Non assignée' }}</span>
+              <span class="detail-value">{{ selectedSignalement.entreprise?.nom || 'Non assignée' }}</span>
             </div>
             <div class="detail-item full-width">
               <span class="detail-label">📍 Coordonnées</span>

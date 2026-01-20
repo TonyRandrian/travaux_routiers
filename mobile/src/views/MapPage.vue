@@ -41,8 +41,8 @@
             :key="signalement.id"
             :lat-lng="[signalement.latitude, signalement.longitude]"
             :radius="10"
-            :color="getStatusColor(signalement.statut_code)"
-            :fill-color="getStatusColor(signalement.statut_code)"
+            :color="getStatusColor(signalement.statut?.code)"
+            :fill-color="getStatusColor(signalement.statut?.code)"
             :fill-opacity="0.8"
             :weight="2"
             @click="openSignalementDetail(signalement)"
@@ -118,7 +118,7 @@
         <div class="sheet-handle"></div>
         
         <div class="sheet-header">
-          <div class="status-indicator" :style="{ background: getStatusColor(selectedSignalement.statut_code) }"></div>
+          <div class="status-indicator" :style="{ background: getStatusColor(selectedSignalement.statut?.code) }"></div>
           <div class="sheet-title">
             <h2>{{ selectedSignalement.titre || 'Signalement' }}</h2>
             <span class="sheet-date">{{ formatDate(selectedSignalement.date_signalement) }}</span>
@@ -145,15 +145,15 @@
           <div class="sheet-stat">
             <ion-icon :icon="businessOutline"></ion-icon>
             <div>
-              <span class="val">{{ selectedSignalement.entreprise || 'N/A' }}</span>
+              <span class="val">{{ selectedSignalement.entreprise?.nom || 'N/A' }}</span>
               <span class="lbl">Entreprise</span>
             </div>
           </div>
         </div>
 
         <div class="sheet-status">
-          <span class="status-badge" :style="{ background: getStatusColor(selectedSignalement.statut_code) }">
-            {{ getStatusLabel(selectedSignalement.statut_code) }}
+          <span class="status-badge" :style="{ background: getStatusColor(selectedSignalement.statut?.code) }">
+            {{ selectedSignalement.statut?.libelle || 'Inconnu' }}
           </span>
         </div>
       </div>
@@ -204,7 +204,7 @@ const signalements = computed(() => signalementsStore.signalements);
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 function countByStatus(status: string): number {
-  return signalements.value.filter(s => s.statut_code === status).length;
+  return signalements.value.filter(s => s.statut?.code === status).length;
 }
 
 onMounted(() => {

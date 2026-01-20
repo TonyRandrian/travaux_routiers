@@ -24,7 +24,8 @@
           <div class="form-group">
             <ion-label>Titre *</ion-label>
             <ion-input
-              v-model="form.titre"
+              :value="form.titre"
+              @ion-input="form.titre = $event.target.value"
               type="text"
               placeholder="Ex: Nid de poule rue..."
               required
@@ -35,10 +36,53 @@
           <div class="form-group">
             <ion-label>Description</ion-label>
             <ion-textarea
-              v-model="form.description"
+              :value="form.description"
+              @ion-input="form.description = $event.target.value"
               placeholder="Décrivez le problème..."
-              :rows="4"
+              :rows="3"
             ></ion-textarea>
+          </div>
+
+          <!-- Surface en m² -->
+          <div class="form-group">
+            <ion-label>Surface (m²)</ion-label>
+            <ion-input
+              :value="form.surface_m2"
+              @ion-input="form.surface_m2 = parseFloat($event.target.value) || null"
+              type="number"
+              placeholder="Ex: 25"
+              step="0.1"
+              min="0"
+            ></ion-input>
+          </div>
+
+          <!-- Budget estimé -->
+          <div class="form-group">
+            <ion-label>Budget estimé (Ar)</ion-label>
+            <ion-input
+              :value="form.budget"
+              @ion-input="form.budget = parseFloat($event.target.value) || null"
+              type="number"
+              placeholder="Ex: 500000"
+              step="1000"
+              min="0"
+            ></ion-input>
+          </div>
+
+          <!-- Entreprise -->
+          <div class="form-group">
+            <ion-label>Entreprise (optionnel)</ion-label>
+            <ion-select
+              :value="form.entreprise_id"
+              @ion-change="form.entreprise_id = $event.target.value"
+              placeholder="Sélectionner une entreprise"
+              interface="action-sheet"
+            >
+              <ion-select-option :value="null">Aucune</ion-select-option>
+              <ion-select-option v-for="ent in entreprises" :key="ent.id" :value="ent.id">
+                {{ ent.nom }}
+              </ion-select-option>
+            </ion-select>
           </div>
 
           <!-- Localisation -->
@@ -117,7 +161,9 @@ import {
   IonInput,
   IonTextarea,
   IonIcon,
-  IonSpinner
+  IonSpinner,
+  IonSelect,
+  IonSelectOption
 } from '@ionic/vue';
 import { locateOutline } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
@@ -134,9 +180,20 @@ const mapRef = ref(null);
 const mapZoom = ref(15);
 const mapCenter = ref<[number, number]>([-18.8792, 47.5079]);
 
+// Liste des entreprises (correspondant à PostgreSQL)
+const entreprises = ref([
+  { id: 1, nom: 'COLAS Madagascar', contact: 'colas@example.mg' },
+  { id: 2, nom: 'SOGEA SATOM', contact: 'sogea@example.mg' },
+  { id: 3, nom: 'EIFFAGE Madagascar', contact: 'eiffage@example.mg' },
+  { id: 4, nom: 'ENTREPRISE GÉNÉRALE', contact: 'general@example.mg' }
+]);
+
 const form = ref({
   titre: '',
   description: '',
+  surface_m2: null as number | null,
+  budget: null as number | null,
+  entreprise_id: null as number | null,
   latitude: null as number | null,
   longitude: null as number | null
 });
@@ -196,15 +253,31 @@ async function handleSubmit() {
   success.value = null;
 
   try {
-    await signalementsStore.createSignalement({
-      titre: form.value.titre,
-      description: form.value.description,
-      latitude: form.value.latitude!,
-      longitude: form.value.longitude!,
-      id_utilisateur: authStore.currentUser.uid,
-      statut_code: 'NOUVEAU',
-      date_signalement: new Date().toISOString().split('T')[0]
-    });
+    // Préparer les données utilisateur pour le signalement
+    const utilisateur = {
+      id: 0, // Sera attribué lors de la sync avec PostgreSQL
+      email: authStore.currentUser.email || '',
+      nom: authStore.currentUser.displayName?.split(' ')[1] || '',
+      prenom: authStore.currentUser.displayName?.split(' ')[0] || ''
+    };
+
+    // Trouver l'entreprise sélectionnée
+    const selectedEntreprise = form.value.entreprise_id 
+      ? entreprises.value.find(e => e.id === form.value.entreprise_id) || null
+      : null;
+
+    await signalementsStore.createSignalement(
+      {
+        titre: form.value.titre,
+        description: form.value.description,
+        latitude: form.value.latitude!,
+        longitude: form.value.longitude!,
+        surface_m2: form.value.surface_m2,
+        budget: form.value.budget
+      },
+      utilisateur,
+      selectedEntreprise
+    );
 
     success.value = 'Signalement créé avec succès !';
     
@@ -269,7 +342,8 @@ ion-toolbar {
 }
 
 .form-group ion-input,
-.form-group ion-textarea {
+.form-group ion-textarea,
+.form-group ion-select {
   --background: #f8f9fa;
   --padding-start: 14px;
   --padding-end: 14px;
@@ -281,9 +355,14 @@ ion-toolbar {
 }
 
 .form-group ion-input:focus-within,
-.form-group ion-textarea:focus-within {
+.form-group ion-textarea:focus-within,
+.form-group ion-select:focus-within {
   border-color: #FFC107;
   --background: white;
+}
+
+.form-group ion-select {
+  width: 100%;
 }
 
 .location-section {

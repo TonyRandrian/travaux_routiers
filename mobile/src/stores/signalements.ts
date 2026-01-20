@@ -5,13 +5,13 @@ import {
   addDoc,
   getDocs,
   query,
-  where,
   orderBy,
   onSnapshot,
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
-import type { Signalement, Stats } from '@/types';
+import type { Signalement, Stats, SignalementUtilisateur } from '@/types';
+import { STATUTS } from '@/types';
 
 export const useSignalementsStore = defineStore('signalements', () => {
   const signalements = ref<Signalement[]>([]);
@@ -19,12 +19,12 @@ export const useSignalementsStore = defineStore('signalements', () => {
   const error = ref<string | null>(null);
   let unsubscribe: Unsubscribe | null = null;
 
-  // Statistiques calculées
+  // Statistiques calculées (utilise statut.code au lieu de statut_code)
   const stats = computed<Stats>(() => {
     const total = signalements.value.length;
-    const nouveaux = signalements.value.filter(s => s.statut_code === 'NOUVEAU').length;
-    const en_cours = signalements.value.filter(s => s.statut_code === 'EN_COURS').length;
-    const termines = signalements.value.filter(s => s.statut_code === 'TERMINE').length;
+    const nouveaux = signalements.value.filter(s => s.statut?.code === 'NOUVEAU').length;
+    const en_cours = signalements.value.filter(s => s.statut?.code === 'EN_COURS').length;
+    const termines = signalements.value.filter(s => s.statut?.code === 'TERMINE').length;
 
     const surface_totale = signalements.value.reduce((acc, s) => acc + (s.surface_m2 || 0), 0);
     const budget_total = signalements.value.reduce((acc, s) => acc + (s.budget || 0), 0);
@@ -42,10 +42,10 @@ export const useSignalementsStore = defineStore('signalements', () => {
     };
   });
 
-  // Récupérer les signalements de l'utilisateur connecté
-  function getMySignalements(userId: string) {
+  // Récupérer les signalements de l'utilisateur connecté (par id utilisateur)
+  function getMySignalements(userId: number) {
     return computed(() =>
-      signalements.value.filter(s => s.id_utilisateur === userId)
+      signalements.value.filter(s => s.utilisateur?.id === userId)
     );
   }
 
@@ -98,20 +98,44 @@ export const useSignalementsStore = defineStore('signalements', () => {
     }
   }
 
-  // Créer un nouveau signalement
-  async function createSignalement(signalement: Omit<Signalement, 'id'>) {
+  // Créer un nouveau signalement (structure alignée avec PostgreSQL)
+  async function createSignalement(
+    data: {
+      titre: string;
+      description: string;
+      latitude: number;
+      longitude: number;
+      surface_m2?: number | null;
+      budget?: number | null;
+    },
+    utilisateur: SignalementUtilisateur,
+    entreprise?: { id: number; nom: string; contact?: string } | null
+  ) {
     loading.value = true;
     error.value = null;
 
     try {
       const signalementsRef = collection(db, 'signalements');
-      const docRef = await addDoc(signalementsRef, {
-        ...signalement,
-        statut_code: 'NOUVEAU',
+      
+      const newSignalement: Omit<Signalement, 'id'> = {
+        titre: data.titre,
+        description: data.description,
+        latitude: data.latitude,
+        longitude: data.longitude,
+        surface_m2: data.surface_m2 || null,
+        budget: data.budget || null,
         date_signalement: new Date().toISOString().split('T')[0],
-        createdAt: new Date().toISOString()
-      });
+        statut: STATUTS[0], // NOUVEAU par défaut
+        utilisateur: utilisateur,
+        entreprise: entreprise ? {
+          id: entreprise.id,
+          nom: entreprise.nom,
+          contact: entreprise.contact
+        } : null,
+        synced_at: null   // Pas encore synchronisé
+      };
 
+      const docRef = await addDoc(signalementsRef, newSignalement);
       return docRef.id;
     } catch (err: any) {
       console.error('Erreur createSignalement:', err);
