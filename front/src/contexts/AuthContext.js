@@ -11,6 +11,14 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import config from '../config/config';
+
+// Constantes des rôles
+export const ROLES = {
+  VISITEUR: 'VISITEUR',
+  USER: 'USER',
+  MANAGER: 'MANAGER'
+};
 
 const AuthContext = createContext();
 
@@ -22,6 +30,28 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isVisitor, setIsVisitor] = useState(false);
+
+  // Récupérer le rôle depuis le backend PostgreSQL
+  async function fetchUserRoleFromBackend(email) {
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/me`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (response.ok) {
+        const userData = await response.json();
+        return userData.role_code || userData.role || ROLES.USER;
+      }
+      return ROLES.USER;
+    } catch (error) {
+      console.error('Erreur récupération rôle backend:', error);
+      return ROLES.USER;
+    }
+  }
 
   // Inscription
   async function signup(email, password, displayName, additionalInfo = {}) {
@@ -39,7 +69,7 @@ export function AuthProvider({ children }) {
       displayName: displayName,
       phone: additionalInfo.phone || '',
       address: additionalInfo.address || '',
-      role: 'user',
+      role: ROLES.USER, // Par défaut, utilisateur normal
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -56,15 +86,86 @@ export function AuthProvider({ children }) {
     return userCredential;
   }
 
-  // Connexion
-  function login(email, password) {
-    return signInWithEmailAndPassword(auth, email, password);
+  // Connexion - essaie d'abord Firebase, puis PostgreSQL si échec
+  async function login(email, password) {
+    // 1. Essayer d'abord Firebase
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      return userCredential;
+    } catch (firebaseError) {
+      console.log('Firebase auth failed, trying PostgreSQL...', firebaseError.code);
+      
+      // 2. Si Firebase échoue, essayer PostgreSQL
+      try {
+        const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, mot_de_passe: password })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+          // Si PostgreSQL échoue aussi, retourner l'erreur Firebase originale
+          throw firebaseError;
+        }
+        
+        // Connexion PostgreSQL réussie
+        // Stocker le token et les infos utilisateur
+        const pgUser = data.user;
+        const role = pgUser.role_code || pgUser.role || ROLES.USER;
+        
+        // Créer un profil local pour l'utilisateur PostgreSQL
+        setCurrentUser({ 
+          uid: `pg_${pgUser.id}`,
+          email: pgUser.email,
+          displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+          isPostgresUser: true
+        });
+        
+        setUserProfile({
+          uid: `pg_${pgUser.id}`,
+          id: pgUser.id,
+          email: pgUser.email,
+          displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
+          role: role,
+          isPostgresUser: true,
+          accessToken: data.accessToken
+        });
+        
+        return { user: pgUser, isPostgresUser: true };
+      } catch (pgError) {
+        console.error('PostgreSQL auth also failed:', pgError);
+        // Relancer l'erreur Firebase originale pour afficher le bon message
+        throw firebaseError;
+      }
+    }
   }
 
   // Déconnexion
   function logout() {
     setUserProfile(null);
+    setIsVisitor(false);
     return signOut(auth);
+  }
+
+  // Mode visiteur (sans connexion)
+  function enableVisitorMode() {
+    setCurrentUser(null);
+    setUserProfile({ 
+      role: ROLES.VISITEUR, 
+      displayName: 'Visiteur',
+      isVisitor: true 
+    });
+    setIsVisitor(true);
+  }
+
+  // Quitter le mode visiteur
+  function exitVisitorMode() {
+    setIsVisitor(false);
+    setUserProfile(null);
   }
 
   // Réinitialisation du mot de passe
@@ -108,17 +209,28 @@ export function AuthProvider({ children }) {
     try {
       const userDocRef = doc(db, 'users', uid);
       const userDoc = await getDoc(userDocRef);
+      
+      // Récupérer le rôle depuis le backend
+      const backendRole = await fetchUserRoleFromBackend(userInfo.email || auth.currentUser?.email);
+      
       if (userDoc.exists()) {
         const data = userDoc.data();
-        setUserProfile(data);
-        return data;
+        // Priorité au rôle du backend PostgreSQL
+        const profileWithRole = { 
+          ...data, 
+          role: backendRole,
+          isVisitor: false 
+        };
+        setUserProfile(profileWithRole);
+        return profileWithRole;
       }
       // Si le document n'existe pas, créer un profil par défaut
       const defaultProfile = {
         uid: uid,
         email: userInfo.email || auth.currentUser?.email || '',
         displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
-        role: 'user',
+        role: backendRole,
+        isVisitor: false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
@@ -132,7 +244,8 @@ export function AuthProvider({ children }) {
         uid: uid,
         email: userInfo.email || auth.currentUser?.email || '',
         displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
-        role: 'user'
+        role: ROLES.USER,
+        isVisitor: false
       };
       setUserProfile(tempProfile);
       return tempProfile;
@@ -164,13 +277,17 @@ export function AuthProvider({ children }) {
     currentUser,
     userProfile,
     loading,
+    isVisitor,
     signup,
     login,
     logout,
     resetPassword,
     updateUserProfile,
     changePassword,
-    fetchUserProfile
+    fetchUserProfile,
+    enableVisitorMode,
+    exitVisitorMode,
+    ROLES
   };
 
   return (

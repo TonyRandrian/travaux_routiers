@@ -6,6 +6,8 @@ import './ManagerPanel.css';
 const ManagerPanel = ({ onClose }) => {
   const [activeTab, setActiveTab] = useState('users');
   const [blockedUsers, setBlockedUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [allSignalements, setAllSignalements] = useState([]);
   const [statuts, setStatuts] = useState([]);
   const [entreprises, setEntreprises] = useState([]);
@@ -16,11 +18,37 @@ const ManagerPanel = ({ onClose }) => {
   const [syncResults, setSyncResults] = useState(null);
   const [lastSyncInfo, setLastSyncInfo] = useState(null);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: '',
+    mot_de_passe: '',
+    nom: '',
+    prenom: '',
+    role_code: 'USER'
+  });
   
-  const { currentUser } = useAuth();
+  const { currentUser, userProfile } = useAuth();
+
+  // Fonction utilitaire pour récupérer le token (Firebase ou PostgreSQL)
+  const getAuthToken = async () => {
+    // Si c'est un utilisateur Firebase avec getIdToken
+    if (currentUser && typeof currentUser.getIdToken === 'function') {
+      return await currentUser.getIdToken();
+    }
+    // Si c'est un utilisateur PostgreSQL, utiliser le token stocké
+    if (userProfile?.accessToken) {
+      return userProfile.accessToken;
+    }
+    if (currentUser?.accessToken) {
+      return currentUser.accessToken;
+    }
+    return null;
+  };
 
   useEffect(() => {
     fetchBlockedUsers();
+    fetchAllUsers();
+    fetchRoles();
     fetchSignalements();
     fetchStatuts();
     fetchEntreprises();
@@ -34,11 +62,39 @@ const ManagerPanel = ({ onClose }) => {
 
   const fetchBlockedUsers = async () => {
     try {
-      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/bloques`);
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/bloques`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
       const data = await response.json();
-      setBlockedUsers(data);
+      setBlockedUsers(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Erreur récupération utilisateurs bloqués:', err);
+    }
+  };
+
+  const fetchAllUsers = async () => {
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAllUsers(data);
+      }
+    } catch (err) {
+      console.error('Erreur récupération utilisateurs:', err);
+    }
+  };
+
+  const fetchRoles = async () => {
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/config/roles`);
+      const data = await response.json();
+      setRoles(data);
+    } catch (err) {
+      console.error('Erreur récupération rôles:', err);
     }
   };
 
@@ -75,14 +131,19 @@ const ManagerPanel = ({ onClose }) => {
   const handleUnblockUser = async (userId) => {
     setLoading(true);
     try {
+      const token = await getAuthToken();
       const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/${userId}/debloquer`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
       });
       
       if (response.ok) {
         showMessage('success', 'Utilisateur débloqué avec succès');
         fetchBlockedUsers();
+        fetchAllUsers();
       } else {
         const data = await response.json();
         showMessage('error', data.error || 'Erreur lors du déblocage');
@@ -93,12 +154,72 @@ const ManagerPanel = ({ onClose }) => {
     setLoading(false);
   };
 
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/create`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newUser)
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        showMessage('success', 'Utilisateur créé avec succès');
+        setShowCreateUser(false);
+        setNewUser({ email: '', mot_de_passe: '', nom: '', prenom: '', role_code: 'USER' });
+        fetchAllUsers();
+      } else {
+        showMessage('error', data.error || 'Erreur lors de la création');
+      }
+    } catch (err) {
+      showMessage('error', 'Erreur de connexion');
+    }
+    setLoading(false);
+  };
+
+  const handleChangeUserRole = async (userId, newRoleCode) => {
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/${userId}/role`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ role_code: newRoleCode })
+      });
+      
+      if (response.ok) {
+        showMessage('success', 'Rôle modifié avec succès');
+        fetchAllUsers();
+      } else {
+        const data = await response.json();
+        showMessage('error', data.error || 'Erreur lors du changement de rôle');
+      }
+    } catch (err) {
+      showMessage('error', 'Erreur de connexion');
+    }
+    setLoading(false);
+  };
+
   const handleUpdateSignalement = async (id, updates) => {
     setLoading(true);
     try {
+      const token = await getAuthToken();
       const response = await fetch(`${config.api.baseUrl}/api/signalements/${id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(updates)
       });
       
@@ -122,7 +243,7 @@ const ManagerPanel = ({ onClose }) => {
     
     try {
       // Récupérer le token d'authentification
-      const token = await currentUser?.getIdToken();
+      const token = await getAuthToken();
       
       // Appeler l'API de synchronisation bidirectionnelle
       const response = await fetch(`${config.api.baseUrl}/api/sync/all`, {
@@ -161,7 +282,7 @@ const ManagerPanel = ({ onClose }) => {
   const handleSyncFromFirestore = async () => {
     setSyncStatus('syncing');
     try {
-      const token = await currentUser?.getIdToken();
+      const token = await getAuthToken();
       const response = await fetch(`${config.api.baseUrl}/api/sync/from-firestore`, {
         method: 'POST',
         headers: { 
@@ -194,7 +315,7 @@ const ManagerPanel = ({ onClose }) => {
   const handleSyncToFirestore = async () => {
     setSyncStatus('syncing');
     try {
-      const token = await currentUser?.getIdToken();
+      const token = await getAuthToken();
       const response = await fetch(`${config.api.baseUrl}/api/sync/to-firestore`, {
         method: 'POST',
         headers: { 
@@ -270,6 +391,18 @@ const ManagerPanel = ({ onClose }) => {
             👥 Utilisateurs bloqués ({blockedUsers.length})
           </button>
           <button 
+            className={`tab ${activeTab === 'create-user' ? 'active' : ''}`}
+            onClick={() => setActiveTab('create-user')}
+          >
+            ➕ Créer utilisateur
+          </button>
+          <button 
+            className={`tab ${activeTab === 'roles' ? 'active' : ''}`}
+            onClick={() => setActiveTab('roles')}
+          >
+            🎭 Gestion des rôles ({allUsers.length})
+          </button>
+          <button 
             className={`tab ${activeTab === 'signalements' ? 'active' : ''}`}
             onClick={() => setActiveTab('signalements')}
           >
@@ -316,6 +449,162 @@ const ManagerPanel = ({ onClose }) => {
                           >
                             🔓 Débloquer
                           </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* Onglet Créer Utilisateur */}
+          {activeTab === 'create-user' && (
+            <div className="create-user-section">
+              <h3>➕ Créer un nouvel utilisateur</h3>
+              <p className="section-description">
+                Créez un compte utilisateur pour l'application mobile. Les utilisateurs créés ici auront par défaut le rôle <strong>USER</strong> et pourront signaler des travaux routiers via l'application mobile.
+              </p>
+              
+              <div className="create-user-form standalone">
+                <form onSubmit={handleCreateUser}>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Email *</label>
+                      <input
+                        type="email"
+                        value={newUser.email}
+                        onChange={(e) => setNewUser({...newUser, email: e.target.value})}
+                        placeholder="utilisateur@example.com"
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Mot de passe *</label>
+                      <input
+                        type="password"
+                        value={newUser.mot_de_passe}
+                        onChange={(e) => setNewUser({...newUser, mot_de_passe: e.target.value})}
+                        placeholder="Minimum 6 caractères"
+                        required
+                        minLength={6}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Prénom</label>
+                      <input
+                        type="text"
+                        value={newUser.prenom}
+                        onChange={(e) => setNewUser({...newUser, prenom: e.target.value})}
+                        placeholder="Prénom de l'utilisateur"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Nom</label>
+                      <input
+                        type="text"
+                        value={newUser.nom}
+                        onChange={(e) => setNewUser({...newUser, nom: e.target.value})}
+                        placeholder="Nom de l'utilisateur"
+                      />
+                    </div>
+                  </div>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Rôle</label>
+                      <select
+                        value={newUser.role_code}
+                        onChange={(e) => setNewUser({...newUser, role_code: e.target.value})}
+                      >
+                        <option value="USER">Utilisateur (USER) - Application mobile</option>
+                        <option value="MANAGER">Manager (MANAGER) - Accès complet</option>
+                      </select>
+                      <small className="form-hint">
+                        USER = Application mobile uniquement | MANAGER = Accès web + mobile
+                      </small>
+                    </div>
+                  </div>
+                  <div className="form-actions-center">
+                    <button type="submit" className="create-btn large" disabled={loading}>
+                      {loading ? '⏳ Création en cours...' : '✓ Créer l\'utilisateur'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              <div className="created-users-info">
+                <h4>📋 Derniers utilisateurs créés</h4>
+                <p>Total : <strong>{allUsers.length}</strong> utilisateur(s) enregistré(s)</p>
+                <div className="recent-users">
+                  {allUsers.slice(-5).reverse().map(user => (
+                    <div key={user.id} className="recent-user-item">
+                      <span className={`role-badge ${user.role_code?.toLowerCase()}`}>{user.role_code}</span>
+                      <span className="user-email">{user.email}</span>
+                      <span className="user-name">{user.prenom} {user.nom}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Onglet Gestion des Rôles */}
+          {activeTab === 'roles' && (
+            <div className="roles-section">
+              <div className="section-header">
+                <h3>Gestion des rôles utilisateurs</h3>
+              </div>
+
+              <div className="roles-legend">
+                <span className="role-tag visiteur">VISITEUR</span> - Consultation uniquement (pas de compte)
+                <span className="role-tag user">USER</span> - Peut signaler des travaux (mobile)
+                <span className="role-tag manager">MANAGER</span> - Accès complet + synchronisation
+              </div>
+              {allUsers.length === 0 ? (
+                <p className="empty-message">Aucun utilisateur inscrit</p>
+              ) : (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Nom complet</th>
+                      <th>Rôle actuel</th>
+                      <th>Statut</th>
+                      <th>Changer le rôle</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allUsers.map(user => (
+                      <tr key={user.id}>
+                        <td>{user.email}</td>
+                        <td>{user.prenom} {user.nom}</td>
+                        <td>
+                          <span className={`role-tag ${user.role_code?.toLowerCase() || 'user'}`}>
+                            {user.role || user.role_code || 'USER'}
+                          </span>
+                        </td>
+                        <td>
+                          {user.bloque ? (
+                            <span className="status-tag blocked">🔒 Bloqué</span>
+                          ) : (
+                            <span className="status-tag active">✓ Actif</span>
+                          )}
+                        </td>
+                        <td>
+                          <select 
+                            className="role-select"
+                            value={user.role_code || 'USER'}
+                            onChange={(e) => handleChangeUserRole(user.id, e.target.value)}
+                            disabled={loading}
+                          >
+                            {roles.map(role => (
+                              <option key={role.id} value={role.code}>
+                                {role.libelle} ({role.code})
+                              </option>
+                            ))}
+                          </select>
                         </td>
                       </tr>
                     ))}

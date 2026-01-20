@@ -4,10 +4,12 @@ const pool = require('../config/database');
 const config = require('../config/config');
 const bcrypt = require('bcryptjs');
 const { 
+  ROLES,
   generateAccessToken, 
   generateRefreshToken, 
   authenticateToken, 
   requireManager,
+  requireUser,
   verifyRefreshToken 
 } = require('../middleware/auth');
 
@@ -34,6 +36,55 @@ router.get('/config/auth', (req, res) => {
     sessionDuration: config.auth.sessionDuration,
     refreshTokenDuration: config.auth.refreshTokenDuration
   });
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs/me:
+ *   get:
+ *     summary: Récupérer les informations de l'utilisateur connecté
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Informations de l'utilisateur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Utilisateur'
+ *       401:
+ *         description: Token manquant ou invalide
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        u.id,
+        u.email,
+        u.nom,
+        u.prenom,
+        u.tentatives,
+        u.bloque,
+        u.created_at,
+        r.code as role_code,
+        r.libelle as role
+      FROM utilisateur u
+      LEFT JOIN role r ON u.id_role = r.id
+      WHERE u.id = $1 OR u.email = $2
+    `, [req.user.id, req.user.email]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur récupération profil:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -131,6 +182,78 @@ router.get('/bloques', authenticateToken, requireManager, async (req, res) => {
 
 /**
  * @swagger
+ * /api/utilisateurs/create:
+ *   post:
+ *     summary: Créer un utilisateur (Manager uniquement)
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - mot_de_passe
+ *             properties:
+ *               email:
+ *                 type: string
+ *               mot_de_passe:
+ *                 type: string
+ *               nom:
+ *                 type: string
+ *               prenom:
+ *                 type: string
+ *               role_code:
+ *                 type: string
+ *                 enum: [VISITEUR, USER, MANAGER]
+ *     responses:
+ *       201:
+ *         description: Utilisateur créé avec succès
+ *       400:
+ *         description: Email déjà utilisé
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ */
+router.post('/create', authenticateToken, requireManager, async (req, res) => {
+  try {
+    const { email, mot_de_passe, nom, prenom, role_code } = req.body;
+    
+    // Vérifier si l'email existe déjà
+    const existingUser = await pool.query('SELECT id FROM utilisateur WHERE email = $1', [email]);
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({ error: 'Cet email est déjà utilisé' });
+    }
+    
+    // Hasher le mot de passe
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(mot_de_passe, salt);
+    
+    // Récupérer le rôle (par défaut USER si non spécifié)
+    const roleToUse = role_code || 'USER';
+    const roleResult = await pool.query(`SELECT id FROM role WHERE code = $1`, [roleToUse]);
+    const id_role = roleResult.rows[0]?.id || 2;
+    
+    const result = await pool.query(`
+      INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, email, nom, prenom, created_at
+    `, [email, hashedPassword, nom, prenom, id_role]);
+    
+    res.status(201).json({
+      message: 'Utilisateur créé avec succès',
+      user: { ...result.rows[0], role_code: roleToUse }
+    });
+  } catch (err) {
+    console.error('Erreur création utilisateur:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
  * /api/utilisateurs/register:
  *   post:
  *     summary: Inscription d'un nouvel utilisateur
@@ -214,6 +337,10 @@ router.post('/login', async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
     
+    console.log('=== LOGIN ATTEMPT ===');
+    console.log('Email:', email);
+    console.log('Password received:', mot_de_passe ? '***' : 'EMPTY');
+    
     // Récupérer l'utilisateur
     const result = await pool.query(`
       SELECT u.*, r.code as role_code, r.libelle as role
@@ -222,24 +349,52 @@ router.post('/login', async (req, res) => {
       WHERE u.email = $1
     `, [email]);
     
+    console.log('User found in DB:', result.rows.length > 0);
+    
     if (result.rows.length === 0) {
+      console.log('LOGIN FAILED: User not found');
       return res.status(401).json({ error: 'Email ou mot de passe incorrect' });
     }
     
     const user = result.rows[0];
+    console.log('User ID:', user.id);
+    console.log('User role:', user.role_code);
+    console.log('Password in DB:', user.mot_de_passe ? user.mot_de_passe.substring(0, 10) + '...' : 'NULL');
+    console.log('User blocked:', user.bloque);
     
     // Vérifier si l'utilisateur est bloqué
     if (user.bloque) {
+      console.log('LOGIN FAILED: User is blocked');
       return res.status(403).json({ 
         error: 'Compte bloqué. Contactez un administrateur.',
         bloque: true
       });
     }
     
-    // Vérifier le mot de passe
-    const validPassword = await bcrypt.compare(mot_de_passe, user.mot_de_passe);
+    // Vérifier le mot de passe (essayer bcrypt puis comparaison directe)
+    let validPassword = false;
+    
+    // 1. Essayer avec bcrypt (mot de passe hashé)
+    try {
+      validPassword = await bcrypt.compare(mot_de_passe, user.mot_de_passe);
+      console.log('Bcrypt compare result:', validPassword);
+    } catch (err) {
+      // Si bcrypt échoue (mot de passe non hashé), on continue
+      console.log('Bcrypt compare failed:', err.message);
+      validPassword = false;
+    }
+    
+    // 2. Si bcrypt échoue, essayer comparaison directe (mot de passe en clair)
+    if (!validPassword) {
+      validPassword = (mot_de_passe === user.mot_de_passe);
+      console.log('Direct compare result:', validPassword);
+      console.log('Comparing:', `"${mot_de_passe}" === "${user.mot_de_passe}"`);
+    }
+    
+    console.log('Final password valid:', validPassword);
     
     if (!validPassword) {
+      console.log('LOGIN FAILED: Invalid password');
       // Incrémenter les tentatives
       const newTentatives = user.tentatives + 1;
       const doitBloquer = newTentatives >= MAX_TENTATIVES;
@@ -627,4 +782,73 @@ router.get('/config/roles', async (req, res) => {
   }
 });
 
-module.exports = router;
+/**
+ * @swagger
+ * /api/utilisateurs/{id}/role:
+ *   put:
+ *     summary: Changer le rôle d'un utilisateur (Manager uniquement)
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de l'utilisateur
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - role_code
+ *             properties:
+ *               role_code:
+ *                 type: string
+ *                 enum: [VISITEUR, USER, MANAGER]
+ *     responses:
+ *       200:
+ *         description: Rôle modifié avec succès
+ *       403:
+ *         description: Accès refusé
+ *       404:
+ *         description: Utilisateur ou rôle non trouvé
+ */
+router.put('/:id/role', authenticateToken, requireManager, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role_code } = req.body;
+    
+    // Vérifier que le rôle existe
+    const roleResult = await pool.query('SELECT id FROM role WHERE code = $1', [role_code]);
+    if (roleResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Rôle non trouvé' });
+    }
+    
+    const id_role = roleResult.rows[0].id;
+    
+    // Mettre à jour le rôle de l'utilisateur
+    const result = await pool.query(`
+      UPDATE utilisateur SET id_role = $1 WHERE id = $2
+      RETURNING id, email, nom, prenom
+    `, [id_role, id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    res.json({ 
+      message: 'Rôle modifié avec succès',
+      user: result.rows[0],
+      nouveau_role: role_code
+    });
+  } catch (err) {
+    console.error('Erreur changement rôle:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;module.exports = router;

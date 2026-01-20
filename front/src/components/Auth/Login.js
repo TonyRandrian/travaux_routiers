@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import './Auth.css';
 
-function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess }) {
+function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitorMode }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
+  const { login, enableVisitorMode } = useAuth();
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -40,6 +40,13 @@ function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess }) {
       }
     }
     setLoading(false);
+  }
+
+  function handleVisitorMode() {
+    enableVisitorMode();
+    if (onVisitorMode) {
+      onVisitorMode();
+    }
   }
 
   return (
@@ -102,6 +109,22 @@ function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess }) {
             </button>
           </p>
         </div>
+
+        <div className="auth-divider">
+          <span>ou</span>
+        </div>
+
+        <button 
+          type="button" 
+          className="visitor-mode-button"
+          onClick={handleVisitorMode}
+        >
+          <span className="visitor-icon">👁️</span>
+          Continuer en tant que visiteur
+        </button>
+        <p className="visitor-info">
+          Les visiteurs peuvent consulter la carte des travaux routiers sans créer de compte.
+        </p>
       </div>
     </div>
   );

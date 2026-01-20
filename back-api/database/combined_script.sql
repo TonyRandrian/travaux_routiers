@@ -13,7 +13,6 @@ CREATE TABLE utilisateur (
     id_role INT REFERENCES role(id),
     tentatives INT DEFAULT 0,
     bloque BOOLEAN DEFAULT FALSE,
-    firebase_uid VARCHAR(255),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -40,8 +39,16 @@ CREATE TABLE signalement (
     date_signalement DATE DEFAULT CURRENT_DATE,
     id_statut_signalement INT REFERENCES statut_signalement(id),
     id_utilisateur INT REFERENCES utilisateur(id),
-    id_entreprise INT REFERENCES entreprise(id)
+    id_entreprise INT REFERENCES entreprise(id),
+    firebase_id VARCHAR(100) UNIQUE,
+    synced_at TIMESTAMP
 );
+
+-- Créer un index pour optimiser les recherches par firebase_id
+CREATE INDEX IF NOT EXISTS idx_signalement_firebase_id ON signalement(firebase_id);
+
+-- Créer un index pour les signalements non synchronisés
+CREATE INDEX IF NOT EXISTS idx_signalement_synced_at ON signalement(synced_at);
 
 CREATE TABLE signalement_statut(
     id SERIAL PRIMARY KEY,
@@ -83,4 +90,3 @@ INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, bu
 ('Effondrement partiel Andravoahangy', 'Affaissement de la route suite aux pluies', -18.9050, 47.5350, 35.0, 15000000, 2, 1, 3, '2026-01-18'),
 ('Fissures rue Rainitovo', 'Multiples fissures sur la chaussée', -18.8950, 47.5200, 80.0, 12000000, 1, 1, NULL, '2026-01-19'),
 ('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15');
-

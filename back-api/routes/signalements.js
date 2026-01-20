@@ -1,8 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
+const { authenticateToken, requireManager, optionalAuth, requireUser } = require('../middleware/auth');
 
-// GET - Récupérer tous les signalements avec détails
+// ============================================
+// ROUTES PUBLIQUES (Visiteurs + Utilisateurs)
+// ============================================
+
+// GET - Récupérer tous les signalements avec détails (accessible à tous)
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -97,8 +102,12 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// POST - Créer un nouveau signalement
-router.post('/', async (req, res) => {
+// ============================================
+// ROUTES PROTÉGÉES (Utilisateurs connectés)
+// ============================================
+
+// POST - Créer un nouveau signalement (utilisateurs connectés)
+router.post('/', authenticateToken, requireUser, async (req, res) => {
   try {
     const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise } = req.body;
     
@@ -127,8 +136,12 @@ router.post('/', async (req, res) => {
   }
 });
 
-// PUT - Mettre à jour un signalement (Manager)
-router.put('/:id', async (req, res) => {
+// ============================================
+// ROUTES MANAGER UNIQUEMENT
+// ============================================
+
+// PUT - Mettre à jour un signalement (Manager uniquement)
+router.put('/:id', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise } = req.body;
@@ -168,8 +181,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE - Supprimer un signalement
-router.delete('/:id', async (req, res) => {
+// DELETE - Supprimer un signalement (Manager uniquement)
+router.delete('/:id', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -188,7 +201,11 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// GET - Récupérer tous les statuts disponibles
+// ============================================
+// ROUTES DE CONFIGURATION (Publiques en lecture)
+// ============================================
+
+// GET - Récupérer tous les statuts disponibles (public)
 router.get('/config/statuts', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM statut_signalement ORDER BY id');
@@ -199,7 +216,7 @@ router.get('/config/statuts', async (req, res) => {
   }
 });
 
-// GET - Récupérer toutes les entreprises
+// GET - Récupérer toutes les entreprises (public)
 router.get('/config/entreprises', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM entreprise ORDER BY nom');
@@ -210,8 +227,8 @@ router.get('/config/entreprises', async (req, res) => {
   }
 });
 
-// POST - Créer une entreprise
-router.post('/config/entreprises', async (req, res) => {
+// POST - Créer une entreprise (Manager uniquement)
+router.post('/config/entreprises', authenticateToken, requireManager, async (req, res) => {
   try {
     const { nom, contact } = req.body;
     const result = await pool.query(
