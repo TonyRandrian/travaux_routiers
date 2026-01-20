@@ -64,7 +64,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import {
   IonPage,
   IonContent,
@@ -76,6 +76,7 @@ import {
 import { useAuthStore } from '@/stores/auth';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 
 const email = ref('');
@@ -94,7 +95,9 @@ async function handleLogin() {
 
   try {
     await authStore.login(email.value, password.value);
-    router.push('/home');
+    // Rediriger vers la page demandée ou home par défaut
+    const redirect = route.query.redirect as string || '/home';
+    router.push(redirect);
   } catch (err) {
     error.value = authStore.error;
   } finally {

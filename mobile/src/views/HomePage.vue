@@ -7,7 +7,13 @@
           Travaux Routiers
         </ion-title>
         <ion-buttons slot="end">
-          <ion-button @click="goToProfile">
+          <!-- Bouton connexion si non connecté -->
+          <ion-button v-if="!isAuthenticated" @click="goToLogin">
+            <ion-icon slot="start" :icon="logInOutline"></ion-icon>
+            Connexion
+          </ion-button>
+          <!-- Bouton profil si connecté -->
+          <ion-button v-else @click="goToProfile">
             <ion-icon slot="icon-only" :icon="personCircleOutline"></ion-icon>
           </ion-button>
         </ion-buttons>
@@ -93,23 +99,34 @@
             <ion-icon slot="start" :icon="addCircleOutline" color="success"></ion-icon>
             <ion-label>
               <h2>Nouveau signalement</h2>
-              <p>Signaler un problème routier</p>
+              <p>{{ isAuthenticated ? 'Signaler un problème routier' : 'Connexion requise' }}</p>
             </ion-label>
+            <ion-icon v-if="!isAuthenticated" slot="end" :icon="lockClosedOutline" color="medium"></ion-icon>
           </ion-item>
 
           <ion-item button @click="goToMySignalements" detail>
             <ion-icon slot="start" :icon="listOutline" color="primary"></ion-icon>
             <ion-label>
               <h2>Mes signalements</h2>
-              <p>Voir mes signalements</p>
+              <p>{{ isAuthenticated ? 'Voir mes signalements' : 'Connexion requise' }}</p>
             </ion-label>
+            <ion-icon v-if="!isAuthenticated" slot="end" :icon="lockClosedOutline" color="medium"></ion-icon>
           </ion-item>
         </ion-list>
       </div>
+
+      <!-- Bannière de connexion si non connecté -->
+      <div v-if="!isAuthenticated" class="login-banner">
+        <p>Connectez-vous pour signaler des problèmes routiers</p>
+        <ion-button color="warning" @click="goToLogin">
+          <ion-icon slot="start" :icon="logInOutline"></ion-icon>
+          Se connecter
+        </ion-button>
+      </div>
     </ion-content>
 
-    <!-- FAB pour nouveau signalement -->
-    <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+    <!-- FAB pour nouveau signalement (visible si connecté) -->
+    <ion-fab v-if="isAuthenticated" slot="fixed" vertical="bottom" horizontal="end">
       <ion-fab-button color="warning" @click="goToNewSignalement">
         <ion-icon :icon="add"></ion-icon>
       </ion-fab-button>
@@ -140,7 +157,9 @@ import {
   mapOutline,
   addCircleOutline,
   listOutline,
-  add
+  add,
+  logInOutline,
+  lockClosedOutline
 } from 'ionicons/icons';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
@@ -150,6 +169,7 @@ const signalementsStore = useSignalementsStore();
 const authStore = useAuthStore();
 
 const stats = computed(() => signalementsStore.stats);
+const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 onMounted(() => {
   signalementsStore.subscribeToSignalements();
@@ -185,6 +205,10 @@ function goToMySignalements() {
 
 function goToProfile() {
   router.push('/profile');
+}
+
+function goToLogin() {
+  router.push('/login');
 }
 </script>
 
@@ -353,6 +377,25 @@ ion-item h2 {
 ion-item p {
   font-size: 13px;
   color: #666;
+}
+
+.login-banner {
+  margin: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.login-banner p {
+  margin: 0 0 16px 0;
+  color: white;
+  font-size: 14px;
+}
+
+.login-banner ion-button {
+  --border-radius: 8px;
 }
 
 ion-fab-button {

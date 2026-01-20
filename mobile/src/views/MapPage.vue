@@ -6,6 +6,11 @@
           <ion-back-button default-href="/home"></ion-back-button>
         </ion-buttons>
         <ion-title>Carte des signalements</ion-title>
+        <ion-buttons slot="end">
+          <ion-button v-if="!isAuthenticated" @click="goToLogin">
+            <ion-icon slot="icon-only" :icon="logInOutline"></ion-icon>
+          </ion-button>
+        </ion-buttons>
       </ion-toolbar>
     </ion-header>
 
@@ -64,8 +69,8 @@
         </ion-fab-button>
       </ion-fab>
 
-      <!-- Bouton nouveau signalement -->
-      <ion-fab slot="fixed" vertical="bottom" horizontal="end">
+      <!-- Bouton nouveau signalement (visible si connecté) -->
+      <ion-fab v-if="isAuthenticated" slot="fixed" vertical="bottom" horizontal="end">
         <ion-fab-button color="warning" @click="goToNewSignalement">
           <ion-icon :icon="add"></ion-icon>
         </ion-fab-button>
@@ -134,15 +139,17 @@ import {
   IonFabButton,
   IonModal
 } from '@ionic/vue';
-import { locateOutline, add } from 'ionicons/icons';
+import { locateOutline, add, logInOutline } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup, LTooltip } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSignalementsStore } from '@/stores/signalements';
+import { useAuthStore } from '@/stores/auth';
 import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
 const signalementsStore = useSignalementsStore();
+const authStore = useAuthStore();
 
 const mapRef = ref(null);
 const zoom = ref(13);
@@ -152,6 +159,7 @@ const showDetail = ref(false);
 const selectedSignalement = ref<Signalement | null>(null);
 
 const signalements = computed(() => signalementsStore.signalements);
+const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 onMounted(() => {
   signalementsStore.subscribeToSignalements();
@@ -190,6 +198,10 @@ function closeDetail() {
 
 function goToNewSignalement() {
   router.push('/signalement/new');
+}
+
+function goToLogin() {
+  router.push('/login');
 }
 
 function getStatusColor(statutCode: StatutCode): string {
