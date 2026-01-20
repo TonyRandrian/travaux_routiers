@@ -6,6 +6,8 @@ node_modules/
 # env
 .env
 .env.local
+# Firebase Admin service account (do not commit)
+config/firebase-service-account.json
 
 # logs
 logs/
