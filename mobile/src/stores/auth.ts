@@ -167,18 +167,29 @@ export const useAuthStore = defineStore('auth', () => {
 
   // Messages d erreur en francais
   function getErrorMessage(code: string): string {
+    console.log('Code erreur Firebase:', code); // Debug
     switch (code) {
       case 'auth/user-not-found':
-        return 'Aucun compte trouve avec cet email';
+        return 'Aucun compte trouvé avec cet email. Inscrivez-vous sur le site web.';
       case 'auth/wrong-password':
+        return 'Mot de passe incorrect';
       case 'auth/invalid-credential':
         return 'Email ou mot de passe incorrect';
       case 'auth/invalid-email':
-        return 'Email invalide';
+        return 'Format d\'email invalide';
+      case 'auth/user-disabled':
+        return 'Ce compte a été désactivé';
       case 'auth/too-many-requests':
-        return 'Trop de tentatives. Reessayez plus tard.';
+        return 'Trop de tentatives. Réessayez dans quelques minutes.';
+      case 'auth/network-request-failed':
+        return 'Erreur réseau. Vérifiez votre connexion internet.';
+      case 'auth/operation-not-allowed':
+        return 'Connexion par email non activée. Contactez l\'administrateur.';
+      case undefined:
+        return 'Erreur de connexion. Vérifiez vos identifiants.';
       default:
-        return 'Une erreur est survenue';
+        console.warn('Code erreur non géré:', code);
+        return `Erreur de connexion (${code || 'inconnue'})`;
     }
   }
 
