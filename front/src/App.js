@@ -159,18 +159,24 @@ function MainApp() {
 // Auth Pages with redirect
 function LoginPage() {
   const navigate = useNavigate();
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
 
+  // Déconnecter l'utilisateur s'il est déjà connecté pour forcer la reconnexion
   useEffect(() => {
     if (currentUser) {
-      navigate('/app', { replace: true });
+      logout();
     }
-  }, [currentUser, navigate]);
+  }, []);
+
+  const handleLoginSuccess = () => {
+    navigate('/app', { replace: true });
+  };
 
   return (
     <Login 
       onSwitchToRegister={() => navigate('/register')}
       onForgotPassword={() => navigate('/forgot-password')}
+      onLoginSuccess={handleLoginSuccess}
     />
   );
 }

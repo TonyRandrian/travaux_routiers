@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import './Auth.css';
 
-function Login({ onSwitchToRegister, onForgotPassword }) {
+function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -16,6 +16,10 @@ function Login({ onSwitchToRegister, onForgotPassword }) {
       setError('');
       setLoading(true);
       await login(email, password);
+      // Rediriger vers l'app après connexion réussie
+      if (onLoginSuccess) {
+        onLoginSuccess();
+      }
     } catch (error) {
       console.error(error);
       switch (error.code) {
