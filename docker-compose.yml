@@ -14,6 +14,9 @@ services:
     build: ./back-api
     ports:
       - "${BACKEND_PORT:-3001}:3000"
+    # Charger les variables depuis le fichier back-api/.env
+    env_file:
+      - ./back-api/.env
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - DB_HOST=db
@@ -21,6 +24,11 @@ services:
       - DB_NAME=${DB_NAME:-travaux_routiers}
       - DB_USER=${DB_USER:-user}
       - DB_PASSWORD=${DB_PASSWORD:-password}
+      # Auth / Sessions (peuvent être redéfinies dans back-api/.env ou via variables d'environnement du projet)
+      - SESSION_DURATION=${SESSION_DURATION:-3600}
+      - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION:-604800}
+      - JWT_SECRET=${JWT_SECRET:-changez_moi_en_valeur_secrete}
+      - MAX_LOGIN_ATTEMPTS=${MAX_LOGIN_ATTEMPTS:-3}
     volumes:
       - ./back-api:/app
       - /app/node_modules
