@@ -1,11 +1,19 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const swaggerUi = require('swagger-ui-express');
 const config = require('./config/config');
 const pool = require('./config/database');
+const swaggerSpec = require('./config/swagger');
 
 // Import des routes
 const signalementsRoutes = require('./routes/signalements');
 const utilisateursRoutes = require('./routes/utilisateurs');
+const syncRoutes = require('./routes/sync');
+
+// Initialiser Firebase (optionnel)
+const { initializeFirebase, isFirebaseAvailable } = require('./config/firebase');
+initializeFirebase();
 
 const app = express();
 
@@ -13,20 +21,47 @@ const app = express();
 app.use(cors(config.cors));
 app.use(express.json());
 
+// Documentation Swagger
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'API Travaux Routiers - Documentation'
+}));
+
+// Route pour le JSON Swagger
+app.get('/api-docs.json', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
+  res.send(swaggerSpec);
+});
+
 // Routes API
 app.use('/api/signalements', signalementsRoutes);
 app.use('/api/utilisateurs', utilisateursRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Routes de base
+/**
+ * @swagger
+ * /:
+ *   get:
+ *     summary: Informations sur l'API
+ *     tags: [Configuration]
+ *     responses:
+ *       200:
+ *         description: Informations de l'API
+ */
 app.get('/', (req, res) => {
   res.json({ 
     message: 'API Travaux Routiers - Antananarivo',
     environment: config.server.env,
     version: '1.0.0',
+    documentation: '/api-docs',
+    firebaseSync: isFirebaseAvailable() ? 'enabled' : 'disabled',
     endpoints: {
       signalements: '/api/signalements',
       utilisateurs: '/api/utilisateurs',
-      health: '/health'
+      sync: '/api/sync',
+      health: '/health',
+      docs: '/api-docs'
     }
   });
 });

@@ -36,6 +36,10 @@ coverage-final.json
 .env
 .env.local
 .env.*.local
+# Firebase Admin service account (do not commit)
+back-api/config/firebase-service-account.json
+# Also ignore any service account jsons in config folders
+**/config/firebase-service-account.json
 
 # Docker and data volumes
 docker-compose.override.yml

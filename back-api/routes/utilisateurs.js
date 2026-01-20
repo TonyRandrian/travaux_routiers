@@ -1,13 +1,64 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
+const config = require('../config/config');
 const bcrypt = require('bcryptjs');
+const { 
+  generateAccessToken, 
+  generateRefreshToken, 
+  authenticateToken, 
+  requireManager,
+  verifyRefreshToken 
+} = require('../middleware/auth');
 
-// Configuration par défaut
-const MAX_TENTATIVES = parseInt(process.env.MAX_LOGIN_ATTEMPTS) || 3;
+// Configuration depuis config.js
+const MAX_TENTATIVES = config.auth.maxLoginAttempts;
 
-// GET - Récupérer tous les utilisateurs (pour Manager)
-router.get('/', async (req, res) => {
+/**
+ * @swagger
+ * /api/utilisateurs/config/auth:
+ *   get:
+ *     summary: Récupérer la configuration d'authentification
+ *     tags: [Configuration]
+ *     responses:
+ *       200:
+ *         description: Configuration d'authentification
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/AuthConfig'
+ */
+router.get('/config/auth', (req, res) => {
+  res.json({
+    maxLoginAttempts: config.auth.maxLoginAttempts,
+    sessionDuration: config.auth.sessionDuration,
+    refreshTokenDuration: config.auth.refreshTokenDuration
+  });
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs:
+ *   get:
+ *     summary: Récupérer tous les utilisateurs (Manager uniquement)
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Liste des utilisateurs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Utilisateur'
+ *       401:
+ *         description: Token manquant ou invalide
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ */
+router.get('/', authenticateToken, requireManager, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
@@ -31,8 +82,29 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET - Récupérer les utilisateurs bloqués
-router.get('/bloques', async (req, res) => {
+/**
+ * @swagger
+ * /api/utilisateurs/bloques:
+ *   get:
+ *     summary: Récupérer les utilisateurs bloqués (Manager uniquement)
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Liste des utilisateurs bloqués
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Utilisateur'
+ *       401:
+ *         description: Token manquant ou invalide
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ */
+router.get('/bloques', authenticateToken, requireManager, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
@@ -57,7 +129,26 @@ router.get('/bloques', async (req, res) => {
   }
 });
 
-// POST - Inscription utilisateur
+/**
+ * @swagger
+ * /api/utilisateurs/register:
+ *   post:
+ *     summary: Inscription d'un nouvel utilisateur
+ *     tags: [Authentification]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *     responses:
+ *       201:
+ *         description: Utilisateur créé avec succès
+ *       400:
+ *         description: Email déjà utilisé
+ *       500:
+ *         description: Erreur serveur
+ */
 router.post('/register', async (req, res) => {
   try {
     const { email, mot_de_passe, nom, prenom } = req.body;
@@ -89,7 +180,36 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// POST - Connexion utilisateur
+/**
+ * @swagger
+ * /api/utilisateurs/login:
+ *   post:
+ *     summary: Connexion utilisateur
+ *     description: |
+ *       Authentifie un utilisateur et retourne un token JWT.
+ *       - Le compte est bloqué après un nombre configurable de tentatives échouées (par défaut 3)
+ *       - Le token d'accès expire après une durée configurable (par défaut 1 heure)
+ *     tags: [Authentification]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
+ *     responses:
+ *       200:
+ *         description: Connexion réussie
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/LoginResponse'
+ *       401:
+ *         description: Email ou mot de passe incorrect
+ *       403:
+ *         description: Compte bloqué
+ *       500:
+ *         description: Erreur serveur
+ */
 router.post('/login', async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
@@ -148,9 +268,16 @@ router.post('/login', async (req, res) => {
     // Ne pas renvoyer le mot de passe
     delete user.mot_de_passe;
     
+    // Générer les tokens JWT
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+    
     res.json({ 
       message: 'Connexion réussie',
-      user: user
+      user: user,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: config.auth.sessionDuration
     });
   } catch (err) {
     console.error('Erreur connexion:', err);
@@ -158,8 +285,164 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// PUT - Débloquer un utilisateur (Manager)
-router.put('/:id/debloquer', async (req, res) => {
+/**
+ * @swagger
+ * /api/utilisateurs/refresh-token:
+ *   post:
+ *     summary: Rafraîchir le token d'accès
+ *     description: Utilise un refresh token valide pour obtenir un nouveau token d'accès
+ *     tags: [Authentification]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RefreshTokenRequest'
+ *     responses:
+ *       200:
+ *         description: Nouveau token d'accès généré
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                 expiresIn:
+ *                   type: integer
+ *       401:
+ *         description: Refresh token invalide ou expiré
+ *       403:
+ *         description: Compte bloqué
+ */
+router.post('/refresh-token', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token requis' });
+    }
+    
+    const decoded = verifyRefreshToken(refreshToken);
+    if (!decoded) {
+      return res.status(401).json({ 
+        error: 'Refresh token invalide ou expiré',
+        code: 'REFRESH_TOKEN_INVALID'
+      });
+    }
+    
+    // Récupérer l'utilisateur
+    const result = await pool.query(`
+      SELECT u.*, r.code as role_code, r.libelle as role
+      FROM utilisateur u
+      LEFT JOIN role r ON u.id_role = r.id
+      WHERE u.id = $1
+    `, [decoded.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    const user = result.rows[0];
+    
+    // Vérifier si l'utilisateur est bloqué
+    if (user.bloque) {
+      return res.status(403).json({ 
+        error: 'Compte bloqué',
+        code: 'ACCOUNT_BLOCKED'
+      });
+    }
+    
+    // Générer un nouveau token d'accès
+    const newAccessToken = generateAccessToken(user);
+    
+    res.json({
+      accessToken: newAccessToken,
+      expiresIn: config.auth.sessionDuration
+    });
+  } catch (err) {
+    console.error('Erreur refresh token:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs/me:
+ *   get:
+ *     summary: Récupérer le profil de l'utilisateur connecté
+ *     tags: [Authentification]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Profil utilisateur
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Utilisateur'
+ *       401:
+ *         description: Token manquant ou invalide
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.get('/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT u.id, u.email, u.nom, u.prenom, u.created_at, r.code as role_code, r.libelle as role
+      FROM utilisateur u
+      LEFT JOIN role r ON u.id_role = r.id
+      WHERE u.id = $1
+    `, [req.user.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur récupération profil:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs/{id}/debloquer:
+ *   put:
+ *     summary: Débloquer un utilisateur (Manager uniquement)
+ *     description: Réinitialise le blocage d'un utilisateur et remet le compteur de tentatives à 0
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de l'utilisateur à débloquer
+ *     responses:
+ *       200:
+ *         description: Utilisateur débloqué avec succès
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Utilisateur débloqué avec succès"
+ *                 user:
+ *                   $ref: '#/components/schemas/Utilisateur'
+ *       401:
+ *         description: Token manquant ou invalide
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.put('/:id/debloquer', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -184,8 +467,41 @@ router.put('/:id/debloquer', async (req, res) => {
   }
 });
 
-// PUT - Modifier les informations d'un utilisateur
-router.put('/:id', async (req, res) => {
+/**
+ * @swagger
+ * /api/utilisateurs/{id}:
+ *   put:
+ *     summary: Modifier les informations d'un utilisateur
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de l'utilisateur
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nom:
+ *                 type: string
+ *               prenom:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Utilisateur modifié
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.put('/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { nom, prenom, email } = req.body;
@@ -210,8 +526,45 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// PUT - Changer le mot de passe
-router.put('/:id/password', async (req, res) => {
+/**
+ * @swagger
+ * /api/utilisateurs/{id}/password:
+ *   put:
+ *     summary: Changer le mot de passe d'un utilisateur
+ *     tags: [Utilisateurs]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID de l'utilisateur
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - ancien_mot_de_passe
+ *               - nouveau_mot_de_passe
+ *             properties:
+ *               ancien_mot_de_passe:
+ *                 type: string
+ *               nouveau_mot_de_passe:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Mot de passe modifié avec succès
+ *       401:
+ *         description: Ancien mot de passe incorrect
+ *       404:
+ *         description: Utilisateur non trouvé
+ */
+router.put('/:id/password', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const { ancien_mot_de_passe, nouveau_mot_de_passe } = req.body;
@@ -241,7 +594,29 @@ router.put('/:id/password', async (req, res) => {
   }
 });
 
-// GET - Récupérer les rôles disponibles
+/**
+ * @swagger
+ * /api/utilisateurs/config/roles:
+ *   get:
+ *     summary: Récupérer les rôles disponibles
+ *     tags: [Configuration]
+ *     responses:
+ *       200:
+ *         description: Liste des rôles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 type: object
+ *                 properties:
+ *                   id:
+ *                     type: integer
+ *                   code:
+ *                     type: string
+ *                   libelle:
+ *                     type: string
+ */
 router.get('/config/roles', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM role ORDER BY id');
