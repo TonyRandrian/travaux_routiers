@@ -8,6 +8,15 @@
         </ion-button>
         <h1>Carte</h1>
         <div class="header-right">
+          <!-- Filtre Mes signalements (visible si connecté) -->
+          <div 
+            v-if="isAuthenticated" 
+            class="filter-toggle" 
+            :class="{ active: showOnlyMine }"
+            @click="showOnlyMine = !showOnlyMine"
+          >
+            <ion-icon :icon="showOnlyMine ? personOutline : peopleOutline"></ion-icon>
+          </div>
           <div class="legend-toggle" @click="showLegend = !showLegend">
             <ion-icon :icon="layersOutline"></ion-icon>
           </div>
@@ -167,7 +176,9 @@ import {
   addOutline,
   resizeOutline,
   walletOutline,
-  businessOutline
+  businessOutline,
+  personOutline,
+  peopleOutline
 } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/vue-leaflet';
@@ -188,9 +199,24 @@ const center = ref<[number, number]>([-18.8792, 47.5079]);
 const currentPosition = ref<[number, number] | null>(null);
 const showDetail = ref(false);
 const showLegend = ref(false);
+const showOnlyMine = ref(false);
 const selectedSignalement = ref<Signalement | null>(null);
 
-const signalements = computed(() => signalementsStore.signalements);
+// Signalements filtrés selon le toggle
+const signalements = computed(() => {
+  const allSignalements = signalementsStore.signalements;
+  
+  if (showOnlyMine.value && authStore.currentUser) {
+    const userEmail = authStore.currentUser.email?.toLowerCase();
+    return allSignalements.filter(s => {
+      const signalementEmail = s.utilisateur?.email?.toLowerCase();
+      const oldUserId = (s as any).id_utilisateur;
+      return signalementEmail === userEmail || oldUserId === authStore.currentUser!.uid;
+    });
+  }
+  
+  return allSignalements;
+});
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
 function countByStatus(status: string): number {
@@ -308,6 +334,7 @@ function formatCurrency(amount: number): string {
   gap: 12px;
 }
 
+.filter-toggle,
 .legend-toggle {
   width: 40px;
   height: 40px;
@@ -317,8 +344,18 @@ function formatCurrency(amount: number): string {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  transition: all 0.3s ease;
 }
 
+.filter-toggle.active {
+  background: linear-gradient(135deg, #FFC107 0%, #FF9800 100%);
+}
+
+.filter-toggle.active ion-icon {
+  color: #0a0a0f;
+}
+
+.filter-toggle ion-icon,
 .legend-toggle ion-icon {
   font-size: 20px;
   color: white;
