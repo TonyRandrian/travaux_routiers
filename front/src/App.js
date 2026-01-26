@@ -88,9 +88,16 @@ function MainApp() {
     try {
       const response = await fetch(`${config.api.baseUrl}/api/signalements`);
       const data = await response.json();
-      setSignalements(data);
+      // S'assurer que data est un tableau
+      if (Array.isArray(data)) {
+        setSignalements(data);
+      } else {
+        console.warn('API retour non-tableau, initialisation array vide');
+        setSignalements([]);
+      }
     } catch (error) {
       console.error('Erreur chargement signalements:', error);
+      setSignalements([]);
     }
   };
 

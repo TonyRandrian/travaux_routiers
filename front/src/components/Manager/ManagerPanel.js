@@ -803,9 +803,21 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
     description: signalement.description || '',
     surface_m2: signalement.surface_m2 || '',
     budget: signalement.budget || '',
-    id_statut_signalement: signalement.id_statut_signalement || '',
-    id_entreprise: signalement.id_entreprise || ''
+    id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
+    id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
   });
+
+  // Mettre à jour les données si le signalement change
+  useEffect(() => {
+    setFormData({
+      titre: signalement.titre || '',
+      description: signalement.description || '',
+      surface_m2: signalement.surface_m2 || '',
+      budget: signalement.budget || '',
+      id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
+      id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
+    });
+  }, [signalement]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;

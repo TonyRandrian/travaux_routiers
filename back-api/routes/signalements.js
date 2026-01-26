@@ -20,6 +20,8 @@ router.get('/', async (req, res) => {
         s.surface_m2,
         s.budget,
         s.date_signalement,
+        s.id_statut_signalement,
+        s.id_entreprise,
         ss.code as statut_code,
         ss.libelle as statut,
         e.nom as entreprise,

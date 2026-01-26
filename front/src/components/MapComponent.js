@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, Tooltip } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
@@ -64,12 +64,22 @@ const MapComponent = ({
   zoom = 13,
   onSignalementClick = null 
 }) => {
+  // S'assurer que signalements est un tableau
+  const signalementsList = Array.isArray(signalements) ? signalements : [];
+  const mapRef = useRef(null);
+  
+  // Utiliser une clé pour forcer la recréation du MapContainer si le centre change
+  const mapKey = `${center[0]}-${center[1]}`;
+  
   return (
-    <div style={{ height: '600px', width: '100%' }}>
+    <div style={{ height: '600px', width: '100%', position: 'relative' }}>
       <MapContainer
+        key={mapKey}
+        ref={mapRef}
         center={center}
         zoom={zoom}
         style={{ height: '100%', width: '100%' }}
+        attributionControl={true}
       >
         {/* Serveur de tuiles local (mode offline) */}
         <TileLayer
@@ -79,7 +89,7 @@ const MapComponent = ({
         />
         
         {/* Afficher les signalements avec cercles colorés */}
-        {signalements.map((signalement) => (
+        {signalementsList.map((signalement) => (
           <CircleMarker
             key={signalement.id}
             center={[signalement.latitude, signalement.longitude]}
