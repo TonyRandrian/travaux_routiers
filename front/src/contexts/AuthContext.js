@@ -70,12 +70,23 @@ export function AuthProvider({ children }) {
       phone: additionalInfo.phone || '',
       address: additionalInfo.address || '',
       role: ROLES.USER, // Par défaut, utilisateur normal
+      tentatives: 0,    // Compteur de tentatives de connexion
+      bloque: false,    // Statut de blocage
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
     
     try {
       await setDoc(userDocRef, userData);
+      
+      // Créer aussi un document dans usersByEmail pour le lookup par email (mobile)
+      const emailDocRef = doc(db, 'usersByEmail', email.toLowerCase());
+      await setDoc(emailDocRef, {
+        uid: user.uid,
+        email: email.toLowerCase(),
+        bloque: false
+      });
+      
       setUserProfile(userData);
     } catch (error) {
       console.error('Erreur création profil Firestore:', error);

@@ -7,7 +7,7 @@ import {
   updateProfile,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
 
@@ -75,22 +75,30 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       // Vérifier que Firebase Auth est initialisé
       if (!auth) {
+        error.value = 'Firebase Auth non configuré';
         throw new Error('Firebase Auth non configuré');
       }
 
-      // Tenter la connexion Firebase Auth directement
+      // 1. Vérifier si l'utilisateur est bloqué AVANT la tentative de connexion
+      if (db) {
+        const blockedInfo = await checkIfUserBlocked(email);
+        if (blockedInfo.bloque) {
+          error.value = 'Compte bloqué. Contactez un manager.';
+          loading.value = false;
+          throw new Error('Compte bloqué');
+        }
+      }
+
+      // 2. Tenter la connexion Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Connexion réussie - réinitialiser les tentatives si possible
+      // 3. Connexion réussie - réinitialiser les tentatives
       try {
         if (db) {
           const userDocRef = doc(db, 'users', userCredential.user.uid);
-          await updateDoc(userDocRef, { tentatives: 0 });
-        } else {
-          console.warn('Firestore non initialisé - impossible de réinitialiser les tentatives');
+          await updateDoc(userDocRef, { tentatives: 0, bloque: false });
         }
       } catch (updateErr) {
-        // Ignorer si le document n'existe pas encore (nouvel utilisateur)
         console.log('Reset tentatives ignoré:', updateErr);
       }
 
@@ -100,47 +108,118 @@ export const useAuthStore = defineStore('auth', () => {
       return userCredential;
     } catch (err: any) {
       console.error('Erreur login:', err.code, err.message);
-      error.value = getErrorMessage(err.code);
+      
+      // Si erreur de mot de passe incorrect, incrémenter les tentatives
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
+        await incrementLoginAttempts(email);
+        // error.value est mis à jour dans incrementLoginAttempts
+      } else if (!error.value) {
+        error.value = getErrorMessage(err.code || err.message);
+      }
+      
       throw err;
     } finally {
       loading.value = false;
     }
   }
 
-  // Incrementer les tentatives de connexion
+  // Vérifier si l'utilisateur est bloqué - cherche par UID directement via query sur users
+  async function checkIfUserBlocked(email: string): Promise<{ bloque: boolean; uid: string | null }> {
+    if (!db) return { bloque: false, uid: null };
+    
+    try {
+      // Chercher l'utilisateur par email dans la collection users
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email.toLowerCase()));
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const userDoc = snapshot.docs[0];
+        const userData = userDoc.data();
+        return { 
+          bloque: userData.bloque === true, 
+          uid: userDoc.id 
+        };
+      }
+      
+      // Essayer aussi avec l'email original (sans lowercase)
+      const q2 = query(usersRef, where('email', '==', email));
+      const snapshot2 = await getDocs(q2);
+      
+      if (!snapshot2.empty) {
+        const userDoc = snapshot2.docs[0];
+        const userData = userDoc.data();
+        return { 
+          bloque: userData.bloque === true, 
+          uid: userDoc.id 
+        };
+      }
+      
+      return { bloque: false, uid: null };
+    } catch (err) {
+      console.error('Erreur checkIfUserBlocked:', err);
+      return { bloque: false, uid: null };
+    }
+  }
+
+  // Incrementer les tentatives de connexion - cherche par email dans users directement
   async function incrementLoginAttempts(email: string) {
     try {
       if (!db) {
-        console.warn('Firestore non initialisé - impossible d\'incrémenter les tentatives');
+        console.warn('Firestore non initialisé');
+        error.value = 'Email ou mot de passe incorrect.';
         return;
       }
 
-      const emailDocRef = doc(db, 'usersByEmail', email.toLowerCase());
-      const emailDoc = await getDoc(emailDocRef);
+      // Chercher l'utilisateur par email dans la collection users
+      const usersRef = collection(db, 'users');
+      let userDocId: string | null = null;
+      let userData: any = null;
 
-      if (emailDoc.exists()) {
-        const uid = emailDoc.data().uid;
-        const userDocRef = doc(db, 'users', uid);
-        const userDoc = await getDoc(userDocRef);
-
-        if (userDoc.exists()) {
-          const currentTentatives = userDoc.data().tentatives || 0;
-          const newTentatives = currentTentatives + 1;
-
-          if (newTentatives >= MAX_TENTATIVES) {
-            await updateDoc(userDocRef, {
-              tentatives: newTentatives,
-              bloque: true
-            });
-            error.value = `Compte bloque apres ${MAX_TENTATIVES} tentatives. Contactez un manager.`;
-          } else {
-            await updateDoc(userDocRef, { tentatives: newTentatives });
-            error.value = `Tentative ${newTentatives}/${MAX_TENTATIVES}. ${MAX_TENTATIVES - newTentatives} tentative(s) restante(s).`;
-          }
+      // Essayer avec email lowercase
+      const q = query(usersRef, where('email', '==', email.toLowerCase()));
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        userDocId = snapshot.docs[0].id;
+        userData = snapshot.docs[0].data();
+      } else {
+        // Essayer avec email original
+        const q2 = query(usersRef, where('email', '==', email));
+        const snapshot2 = await getDocs(q2);
+        
+        if (!snapshot2.empty) {
+          userDocId = snapshot2.docs[0].id;
+          userData = snapshot2.docs[0].data();
         }
+      }
+
+      if (!userDocId || !userData) {
+        console.warn('Utilisateur non trouvé dans Firestore pour:', email);
+        error.value = 'Email ou mot de passe incorrect.';
+        return;
+      }
+
+      const currentTentatives = userData.tentatives || 0;
+      const newTentatives = currentTentatives + 1;
+      const userDocRef = doc(db, 'users', userDocId);
+
+      if (newTentatives >= MAX_TENTATIVES) {
+        // Bloquer l'utilisateur
+        await updateDoc(userDocRef, {
+          tentatives: newTentatives,
+          bloque: true
+        });
+        error.value = `Compte bloqué après ${MAX_TENTATIVES} tentatives. Contactez un manager.`;
+        console.log('Utilisateur bloqué:', email, 'tentatives:', newTentatives);
+      } else {
+        await updateDoc(userDocRef, { tentatives: newTentatives });
+        error.value = `Mot de passe incorrect. Tentative ${newTentatives}/${MAX_TENTATIVES}. ${MAX_TENTATIVES - newTentatives} essai(s) restant(s).`;
+        console.log('Tentative échouée:', email, 'tentatives:', newTentatives);
       }
     } catch (err) {
       console.error('Erreur incrementLoginAttempts:', err);
+      error.value = 'Email ou mot de passe incorrect.';
     }
   }
 
