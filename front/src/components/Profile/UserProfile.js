@@ -88,6 +88,9 @@ function UserProfile({ onClose }) {
   async function handleLogout() {
     try {
       await logout();
+      onClose();
+      // Rediriger vers la page de login
+      window.location.href = '/';
     } catch (error) {
       console.error('Erreur lors de la déconnexion:', error);
     }

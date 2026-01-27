@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth, ROLES } from '../../contexts/AuthContext';
 import './Auth.css';
 
-function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitorMode }) {
+function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitorMode, onAccessDenied }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -15,10 +15,22 @@ function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitor
     try {
       setError('');
       setLoading(true);
-      await login(email, password);
-      // Rediriger vers l'app après connexion réussie
-      if (onLoginSuccess) {
-        onLoginSuccess();
+      const result = await login(email, password);
+      
+      // Vérifier le rôle de l'utilisateur après connexion
+      const userRole = result?.user?.role_code || result?.user?.role || 
+                       result?.userProfile?.role || ROLES.USER;
+      
+      // Si c'est un utilisateur simple, rediriger vers access-denied
+      if (userRole === ROLES.USER) {
+        if (onAccessDenied) {
+          onAccessDenied();
+        }
+      } else {
+        // Rediriger vers l'app après connexion réussie
+        if (onLoginSuccess) {
+          onLoginSuccess();
+        }
       }
     } catch (error) {
       console.error(error);
