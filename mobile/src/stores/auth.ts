@@ -83,8 +83,12 @@ export const useAuthStore = defineStore('auth', () => {
       
       // Connexion réussie - réinitialiser les tentatives si possible
       try {
-        const userDocRef = doc(db, 'users', userCredential.user.uid);
-        await updateDoc(userDocRef, { tentatives: 0 });
+        if (db) {
+          const userDocRef = doc(db, 'users', userCredential.user.uid);
+          await updateDoc(userDocRef, { tentatives: 0 });
+        } else {
+          console.warn('Firestore non initialisé - impossible de réinitialiser les tentatives');
+        }
       } catch (updateErr) {
         // Ignorer si le document n'existe pas encore (nouvel utilisateur)
         console.log('Reset tentatives ignoré:', updateErr);
@@ -106,6 +110,11 @@ export const useAuthStore = defineStore('auth', () => {
   // Incrementer les tentatives de connexion
   async function incrementLoginAttempts(email: string) {
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - impossible d\'incrémenter les tentatives');
+        return;
+      }
+
       const emailDocRef = doc(db, 'usersByEmail', email.toLowerCase());
       const emailDoc = await getDoc(emailDocRef);
 
@@ -138,6 +147,11 @@ export const useAuthStore = defineStore('auth', () => {
   // Deconnexion
   async function logout() {
     try {
+      if (!auth) {
+        console.warn('Firebase Auth non initialisé - impossible de se déconnecter');
+        userProfile.value = null;
+        return;
+      }
       await signOut(auth);
       userProfile.value = null;
     } catch (err: any) {
@@ -151,6 +165,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (!currentUser.value) throw new Error('Non connecte');
 
     try {
+      if (!db) throw new Error('Firestore non initialisé');
       const userDocRef = doc(db, 'users', currentUser.value.uid);
 
       if (updates.displayName) {

@@ -25,7 +25,7 @@
             <ion-label>Titre *</ion-label>
             <ion-input
               :value="form.titre"
-              @ion-input="form.titre = $event.target.value"
+              @ion-input="form.titre = ($event.detail?.value ?? '')"
               type="text"
               placeholder="Ex: Nid de poule rue..."
               required
@@ -37,7 +37,7 @@
             <ion-label>Description</ion-label>
             <ion-textarea
               :value="form.description"
-              @ion-input="form.description = $event.target.value"
+              @ion-input="form.description = ($event.detail?.value ?? '')"
               placeholder="Décrivez le problème..."
               :rows="3"
             ></ion-textarea>
@@ -48,7 +48,7 @@
             <ion-label>Surface (m²)</ion-label>
             <ion-input
               :value="form.surface_m2"
-              @ion-input="form.surface_m2 = parseFloat($event.target.value) || null"
+              @ion-input="form.surface_m2 = parseFloat(String($event.detail?.value ?? '')) || null"
               type="number"
               placeholder="Ex: 25"
               step="0.1"
@@ -61,7 +61,7 @@
             <ion-label>Budget estimé (Ar)</ion-label>
             <ion-input
               :value="form.budget"
-              @ion-input="form.budget = parseFloat($event.target.value) || null"
+              @ion-input="form.budget = parseFloat(String($event.detail?.value ?? '')) || null"
               type="number"
               placeholder="Ex: 500000"
               step="1000"
@@ -74,7 +74,7 @@
             <ion-label>Entreprise (optionnel)</ion-label>
             <ion-select
               :value="form.entreprise_id"
-              @ion-change="form.entreprise_id = $event.target.value"
+              @ion-change="form.entreprise_id = ($event.detail?.value ?? null)"
               placeholder="Sélectionner une entreprise"
               interface="action-sheet"
             >

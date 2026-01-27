@@ -107,6 +107,13 @@ export const useSignalementsStore = defineStore('signalements', () => {
     error.value = null;
 
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - subscription signalements annulée');
+        loading.value = false;
+        error.value = 'Firestore non initialisé';
+        return;
+      }
+
       const signalementsRef = collection(db, 'signalements');
       const q = query(signalementsRef, orderBy('date_signalement', 'desc'));
 
@@ -131,6 +138,12 @@ export const useSignalementsStore = defineStore('signalements', () => {
     error.value = null;
 
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - impossibilité de récupérer les signalements');
+        error.value = 'Firestore non initialisé';
+        return;
+      }
+
       const signalementsRef = collection(db, 'signalements');
       const q = query(signalementsRef, orderBy('date_signalement', 'desc'));
       const snapshot = await getDocs(q);
@@ -161,6 +174,11 @@ export const useSignalementsStore = defineStore('signalements', () => {
     error.value = null;
 
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - impossible de créer un signalement');
+        throw new Error('Firestore non initialisé');
+      }
+
       const signalementsRef = collection(db, 'signalements');
       
       // Récupérer le statut NOUVEAU depuis les référentiels

@@ -36,7 +36,7 @@
               <ion-icon :icon="mailOutline" class="input-icon"></ion-icon>
               <ion-input
                 :value="email"
-                @ion-input="email = $event.target.value"
+                @ion-input="email = ($event.detail?.value ?? '')"
                 type="email"
                 placeholder="Email"
                 class="modern-input"
@@ -47,7 +47,7 @@
               <ion-icon :icon="lockClosedOutline" class="input-icon"></ion-icon>
               <ion-input
                 :value="password"
-                @ion-input="password = $event.target.value"
+                @ion-input="password = ($event.detail?.value ?? '')"
                 :type="showPassword ? 'text' : 'password'"
                 placeholder="Mot de passe"
                 class="modern-input"

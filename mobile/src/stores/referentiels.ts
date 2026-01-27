@@ -73,6 +73,13 @@ export const useReferentielsStore = defineStore('referentiels', () => {
   // Charger les statuts depuis Firebase
   async function loadStatuts() {
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - statuts non chargés');
+        statuts.value = STATUTS_FALLBACK;
+        statutsFromFirebase.value = false;
+        return;
+      }
+
       const statutsRef = collection(db, 'statuts');
       const snapshot = await getDocs(statutsRef);
 
@@ -103,6 +110,13 @@ export const useReferentielsStore = defineStore('referentiels', () => {
   // Charger les entreprises depuis Firebase
   async function loadEntreprises() {
     try {
+      if (!db) {
+        console.warn('Firestore non initialisé - entreprises non chargées');
+        entreprises.value = ENTREPRISES_FALLBACK;
+        entreprisesFromFirebase.value = false;
+        return;
+      }
+
       const entreprisesRef = collection(db, 'entreprises');
       const snapshot = await getDocs(entreprisesRef);
 

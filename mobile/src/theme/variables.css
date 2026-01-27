@@ -113,3 +113,31 @@ ion-item {
 .loading {
   animation: pulse 1.5s ease-in-out infinite;
 }
+
+/* 🔧 Masquer la barre de défilement sur mobile tout en conservant le défilement */
+@media (pointer: coarse) {
+  html, body, ion-app, ion-content, .ion-page, #app {
+    /* Firefox */
+    scrollbar-width: none !important;
+    /* IE 10+ */
+    -ms-overflow-style: none !important;
+  }
+
+  html::-webkit-scrollbar, body::-webkit-scrollbar, ion-content::-webkit-scrollbar, .ion-page::-webkit-scrollbar, #app::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+/* Fallback global hide (au cas où) */
+html, body, ion-app, ion-content, .ion-page, #app {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+html::-webkit-scrollbar, body::-webkit-scrollbar, ion-content::-webkit-scrollbar, .ion-page::-webkit-scrollbar, #app::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

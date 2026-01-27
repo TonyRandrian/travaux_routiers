@@ -278,8 +278,8 @@ function formatDate(date: string): string {
   });
 }
 
-function formatCurrency(amount: number): string {
-  if (!amount) return '0 MGA';
+function formatCurrency(amount: number | null | undefined): string {
+  if (!amount) return 'N/A';
   if (amount >= 1000000) return (amount / 1000000).toFixed(1) + 'M MGA';
   if (amount >= 1000) return (amount / 1000).toFixed(0) + 'k MGA';
   return amount + ' MGA';

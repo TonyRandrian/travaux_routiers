@@ -34,7 +34,7 @@
             <ion-label>Nom complet</ion-label>
             <ion-input
               :value="form.displayName"
-              @ion-input="form.displayName = $event.target.value"
+              @ion-input="form.displayName = ($event.detail?.value ?? '')"
               type="text"
               placeholder="Votre nom"
             ></ion-input>
@@ -44,7 +44,7 @@
             <ion-label>Téléphone</ion-label>
             <ion-input
               :value="form.phone"
-              @ion-input="form.phone = $event.target.value"
+              @ion-input="form.phone = ($event.detail?.value ?? '')"
               type="tel"
               placeholder="+261 34 00 000 00"
             ></ion-input>
