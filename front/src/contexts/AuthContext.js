@@ -91,7 +91,12 @@ export function AuthProvider({ children }) {
     // 1. Essayer d'abord Firebase
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return userCredential;
+      const user = userCredential.user;
+      
+      // Récupérer le profil avec le rôle immédiatement après connexion
+      const profile = await fetchUserProfile(user.uid, { email: user.email, displayName: user.displayName });
+      
+      return { user: userCredential.user, userProfile: profile, isFirebaseUser: true };
     } catch (firebaseError) {
       console.log('Firebase auth failed, trying PostgreSQL...', firebaseError.code);
       
@@ -116,16 +121,17 @@ export function AuthProvider({ children }) {
         const role = pgUser.role_code || pgUser.role || ROLES.USER;
         
         // Créer un profil local pour l'utilisateur PostgreSQL
-        setCurrentUser({ 
+        const userObj = { 
           uid: `pg_${pgUser.id}`,
           email: pgUser.email,
           displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
           accessToken: data.accessToken,
           refreshToken: data.refreshToken,
           isPostgresUser: true
-        });
+        };
+        setCurrentUser(userObj);
         
-        setUserProfile({
+        const profileObj = {
           uid: `pg_${pgUser.id}`,
           id: pgUser.id,
           email: pgUser.email,
@@ -133,9 +139,14 @@ export function AuthProvider({ children }) {
           role: role,
           isPostgresUser: true,
           accessToken: data.accessToken
-        });
+        };
+        setUserProfile(profileObj);
         
-        return { user: pgUser, isPostgresUser: true };
+        // Sauvegarder la session PostgreSQL dans localStorage
+        localStorage.setItem('pgUser', JSON.stringify(userObj));
+        localStorage.setItem('pgUserProfile', JSON.stringify(profileObj));
+        
+        return { user: pgUser, userProfile: profileObj, isPostgresUser: true };
       } catch (pgError) {
         console.error('PostgreSQL auth also failed:', pgError);
         // Relancer l'erreur Firebase originale pour afficher le bon message
@@ -148,6 +159,9 @@ export function AuthProvider({ children }) {
   function logout() {
     setUserProfile(null);
     setIsVisitor(false);
+    // Nettoyer la session PostgreSQL du localStorage
+    localStorage.removeItem('pgUser');
+    localStorage.removeItem('pgUserProfile');
     return signOut(auth);
   }
 
@@ -254,6 +268,26 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     setLoading(true);
+    
+    // Vérifier d'abord s'il y a une session PostgreSQL sauvegardée
+    const savedPgUser = localStorage.getItem('pgUser');
+    const savedPgProfile = localStorage.getItem('pgUserProfile');
+    
+    if (savedPgUser && savedPgProfile) {
+      try {
+        const pgUser = JSON.parse(savedPgUser);
+        const pgProfile = JSON.parse(savedPgProfile);
+        setCurrentUser(pgUser);
+        setUserProfile(pgProfile);
+        setLoading(false);
+        return; // Ne pas écouter Firebase si session PostgreSQL existe
+      } catch (e) {
+        console.error('Erreur parsing session PostgreSQL:', e);
+        localStorage.removeItem('pgUser');
+        localStorage.removeItem('pgUserProfile');
+      }
+    }
+    
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       try {
         setCurrentUser(user);

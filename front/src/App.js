@@ -15,7 +15,26 @@ import UserProfile from './components/Profile/UserProfile';
 // Seuls les VISITEURS et MANAGERS ont accès au web
 // Les USER (utilisateurs simples) doivent utiliser l'app mobile
 function ProtectedRoute({ children }) {
-  const { currentUser, isVisitor, userProfile } = useAuth();
+  const { currentUser, isVisitor, userProfile, loading } = useAuth();
+  
+  // Attendre que le chargement soit terminé
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Chargement...</p>
+        </div>
+      </div>
+    );
+  }
   
   // Si mode visiteur activé, autoriser
   if (isVisitor) {
@@ -25,6 +44,25 @@ function ProtectedRoute({ children }) {
   // Si pas connecté, rediriger vers login
   if (!currentUser && !userProfile) {
     return <Navigate to="/" replace />;
+  }
+  
+  // Attendre que le profil soit chargé avant de vérifier le rôle
+  if (currentUser && !userProfile) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Chargement du profil...</p>
+        </div>
+      </div>
+    );
   }
   
   // Si connecté, vérifier le rôle
@@ -246,14 +284,28 @@ function MainApp() {
 // Auth Pages with redirect
 function LoginPage() {
   const navigate = useNavigate();
-  const { currentUser, logout, isVisitor } = useAuth();
+  const { currentUser, userProfile, isVisitor, loading } = useAuth();
 
-  // Déconnecter l'utilisateur s'il est déjà connecté pour forcer la reconnexion
+  // Rediriger l'utilisateur déjà connecté vers la bonne page selon son rôle
+  // Attendre que le loading soit terminé ET que le profil soit chargé
   useEffect(() => {
-    if (currentUser && !isVisitor) {
-      logout();
+    if (loading) return; // Attendre la fin du chargement
+    
+    if (isVisitor) {
+      navigate('/app', { replace: true });
+      return;
     }
-  }, []);
+    
+    // Si connecté ET profil chargé, rediriger selon le rôle
+    if (currentUser && userProfile) {
+      const role = userProfile.role;
+      if (role === ROLES.USER) {
+        navigate('/access-denied', { replace: true });
+      } else {
+        navigate('/app', { replace: true });
+      }
+    }
+  }, [currentUser, userProfile, isVisitor, loading, navigate]);
 
   const handleLoginSuccess = () => {
     navigate('/app', { replace: true });
@@ -263,12 +315,17 @@ function LoginPage() {
     navigate('/app', { replace: true });
   };
 
+  const handleAccessDenied = () => {
+    navigate('/access-denied', { replace: true });
+  };
+
   return (
     <Login 
       onSwitchToRegister={() => navigate('/register')}
       onForgotPassword={() => navigate('/forgot-password')}
       onLoginSuccess={handleLoginSuccess}
       onVisitorMode={handleVisitorMode}
+      onAccessDenied={handleAccessDenied}
     />
   );
 }
