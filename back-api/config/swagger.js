@@ -14,8 +14,12 @@ const swaggerOptions = {
     },
     servers: [
       {
+        url: 'http://localhost:3001',
+        description: 'Serveur de développement (Docker)'
+      },
+      {
         url: 'http://localhost:3000',
-        description: 'Serveur de développement'
+        description: 'Serveur local (sans Docker)'
       }
     ],
     components: {
