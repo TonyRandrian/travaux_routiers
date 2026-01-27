@@ -77,11 +77,21 @@ router.post('/from-firestore', authenticateToken, requireManager, async (req, re
       });
     }
 
-    const results = await SyncService.syncFromFirestore();
+    // Importer les signalements depuis Firebase
+    const signalementResults = await SyncService.syncFromFirestore();
+    
+    // Importer aussi les utilisateurs depuis Firebase
+    const userResults = await SyncService.importUsersFromFirestore();
+    
     res.json({
       success: true,
-      message: `Synchronisation depuis Firestore terminée`,
-      results
+      message: `Import depuis Firebase terminé`,
+      results: {
+        signalements: signalementResults,
+        users: userResults,
+        imported: (signalementResults.imported || 0) + (userResults.imported || 0),
+        updated: (signalementResults.updated || 0) + (userResults.updated || 0)
+      }
     });
   } catch (error) {
     console.error('Erreur sync from Firestore:', error);
@@ -128,11 +138,21 @@ router.post('/to-firestore', authenticateToken, requireManager, async (req, res)
       });
     }
 
-    const results = await SyncService.syncToFirestore();
+    // Exporter les signalements vers Firebase (PostgreSQL → Firebase)
+    const signalementResults = await SyncService.syncToFirestore();
+    
+    // Exporter aussi les utilisateurs vers Firebase (PostgreSQL → Firebase)
+    const userResults = await SyncService.exportUsersToFirestore();
+    
     res.json({
       success: true,
-      message: `Synchronisation vers Firestore terminée`,
-      results
+      message: `Export vers Firebase terminé`,
+      results: {
+        signalements: signalementResults,
+        users: userResults,
+        exported: (signalementResults.exported || 0) + (userResults.exported || 0),
+        updated: (signalementResults.updated || 0) + (userResults.updated || 0)
+      }
     });
   } catch (error) {
     console.error('Erreur sync to Firestore:', error);

@@ -268,43 +268,59 @@ class SyncService {
 
   /**
    * Synchronisation bidirectionnelle complète
+   * 1. Import depuis Firebase (signalements + utilisateurs)
+   * 2. Export vers Firebase (signalements + utilisateurs)
    */
   static async syncAll() {
     const results = {
       fromFirestore: null,
       toFirestore: null,
-      users: null,
+      usersImport: null,
+      usersExport: null,
       timestamp: new Date().toISOString()
     };
 
-    // 1. D'abord récupérer depuis Firestore (nouveaux signalements mobiles)
+    // 1. D'abord importer depuis Firebase (nouveaux signalements et utilisateurs mobiles)
     try {
       results.fromFirestore = await this.syncFromFirestore();
     } catch (error) {
       results.fromFirestore = { error: error.message };
     }
 
-    // 2. Ensuite envoyer vers Firestore (mises à jour serveur)
+    try {
+      results.usersImport = await this.importUsersFromFirestore();
+    } catch (error) {
+      results.usersImport = { error: error.message };
+    }
+
+    // 2. Ensuite exporter vers Firebase (mises à jour serveur)
     try {
       results.toFirestore = await this.syncToFirestore();
     } catch (error) {
       results.toFirestore = { error: error.message };
     }
 
-    // 3. Synchroniser les utilisateurs
     try {
-      results.users = await this.syncUsers();
+      results.usersExport = await this.exportUsersToFirestore();
     } catch (error) {
-      results.users = { error: error.message };
+      results.usersExport = { error: error.message };
     }
+
+    // Pour compatibilité avec l'ancien format
+    results.users = {
+      imported: results.usersImport?.imported || 0,
+      exported: results.usersExport?.exported || 0,
+      updated: (results.usersImport?.updated || 0) + (results.usersExport?.updated || 0)
+    };
 
     return results;
   }
 
   /**
-   * Synchroniser les utilisateurs entre Firebase et PostgreSQL
+   * IMPORTER les utilisateurs depuis Firebase vers PostgreSQL
+   * Direction: Firebase → PostgreSQL (unidirectionnel)
    */
-  static async syncUsers() {
+  static async importUsersFromFirestore() {
     if (!this.isAvailable()) {
       throw new Error('Firebase non configuré');
     }
@@ -312,13 +328,12 @@ class SyncService {
     const db = getFirestore();
     const results = {
       imported: 0,
-      exported: 0,
+      updated: 0,
       errors: [],
       details: []
     };
 
     try {
-      // 1. Récupérer les utilisateurs de Firestore
       const snapshot = await db.collection(USERS_COLLECTION).get();
       
       // Récupérer le rôle USER par défaut
@@ -333,15 +348,18 @@ class SyncService {
 
           if (!email) continue;
 
+          // Récupérer les valeurs depuis Firebase
+          const firebaseTentatives = firestoreUser.tentatives || 0;
+          const firebaseBloque = firestoreUser.bloque || false;
+
           // Vérifier si l'utilisateur existe déjà dans PostgreSQL
           const existingResult = await pool.query(
-            'SELECT id FROM utilisateur WHERE email = $1',
+            'SELECT id, tentatives, bloque FROM utilisateur WHERE email = $1',
             [email]
           );
 
           if (existingResult.rows.length === 0) {
-            // Créer l'utilisateur dans PostgreSQL
-            // Générer un mot de passe par défaut brut (l'utilisateur utilise Firebase pour se connecter)
+            // Créer l'utilisateur dans PostgreSQL avec les données Firebase
             const defaultPassword = 'firebase_user_' + firebaseUid.substring(0, 8);
             
             const displayName = firestoreUser.displayName || '';
@@ -350,16 +368,39 @@ class SyncService {
             const nom = nameParts.slice(1).join(' ') || '';
 
             await pool.query(`
-              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid)
-              VALUES ($1, $2, $3, $4, $5, $6)
-            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseUid]);
+              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid, tentatives, bloque)
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseUid, firebaseTentatives, firebaseBloque]);
 
             results.imported++;
             results.details.push({
               action: 'imported',
               email: email,
-              source: 'firebase'
+              tentatives: firebaseTentatives,
+              bloque: firebaseBloque
             });
+          } else {
+            // Mettre à jour l'utilisateur existant avec les données Firebase
+            const existingUser = existingResult.rows[0];
+
+            // Firebase est la source de vérité pour l'import
+            if (existingUser.tentatives !== firebaseTentatives || existingUser.bloque !== firebaseBloque) {
+              await pool.query(`
+                UPDATE utilisateur 
+                SET tentatives = $1, bloque = $2, firebase_uid = COALESCE(firebase_uid, $3)
+                WHERE id = $4
+              `, [firebaseTentatives, firebaseBloque, firebaseUid, existingUser.id]);
+
+              results.updated++;
+              results.details.push({
+                action: 'updated',
+                email: email,
+                oldTentatives: existingUser.tentatives,
+                newTentatives: firebaseTentatives,
+                oldBloque: existingUser.bloque,
+                newBloque: firebaseBloque
+              });
+            }
           }
         } catch (userError) {
           results.errors.push({
@@ -369,18 +410,50 @@ class SyncService {
         }
       }
 
-      // 2. Exporter les utilisateurs PostgreSQL vers Firestore (sauf ceux déjà liés)
+      return results;
+    } catch (error) {
+      throw new Error(`Erreur import utilisateurs depuis Firebase: ${error.message}`);
+    }
+  }
+
+  /**
+   * EXPORTER les utilisateurs depuis PostgreSQL vers Firebase
+   * Direction: PostgreSQL → Firebase (unidirectionnel)
+   */
+  static async exportUsersToFirestore() {
+    if (!this.isAvailable()) {
+      throw new Error('Firebase non configuré');
+    }
+
+    const db = getFirestore();
+    const results = {
+      exported: 0,
+      updated: 0,
+      errors: [],
+      details: []
+    };
+
+    try {
+      // Récupérer TOUS les utilisateurs PostgreSQL
       const pgUsers = await pool.query(`
         SELECT u.*, r.code as role_code 
         FROM utilisateur u
         LEFT JOIN role r ON u.id_role = r.id
-        WHERE u.firebase_uid IS NULL
       `);
 
       for (const user of pgUsers.rows) {
         try {
-          // Créer un document dans Firestore pour référence
-          const userDocRef = db.collection(USERS_COLLECTION).doc(`pg_${user.id}`);
+          // Déterminer l'ID du document Firebase
+          let docId = user.firebase_uid;
+          
+          if (!docId) {
+            // Créer un nouvel ID pour cet utilisateur
+            docId = `pg_${user.id}`;
+          }
+
+          const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
+          
+          // Envoyer les données PostgreSQL vers Firebase (source de vérité = PostgreSQL)
           await userDocRef.set({
             email: user.email,
             password: user.mot_de_passe,
@@ -388,22 +461,30 @@ class SyncService {
             nom: user.nom || '',
             prenom: user.prenom || '',
             role: user.role_code || 'USER',
+            tentatives: user.tentatives || 0,
+            bloque: user.bloque || false,
             pg_id: user.id,
             createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
-            syncedFromServer: true
+            syncedFromServer: true,
+            lastSyncAt: new Date().toISOString()
           }, { merge: true });
 
-          // Mettre à jour le firebase_uid dans PostgreSQL
-          await pool.query(
-            'UPDATE utilisateur SET firebase_uid = $1 WHERE id = $2',
-            [`pg_${user.id}`, user.id]
-          );
+          // Mettre à jour le firebase_uid si c'était un nouvel utilisateur
+          if (!user.firebase_uid) {
+            await pool.query(
+              'UPDATE utilisateur SET firebase_uid = $1 WHERE id = $2',
+              [docId, user.id]
+            );
+            results.exported++;
+          } else {
+            results.updated++;
+          }
 
-          results.exported++;
           results.details.push({
-            action: 'exported',
+            action: user.firebase_uid ? 'updated' : 'exported',
             email: user.email,
-            source: 'postgresql'
+            tentatives: user.tentatives || 0,
+            bloque: user.bloque || false
           });
         } catch (exportError) {
           results.errors.push({
@@ -415,8 +496,16 @@ class SyncService {
 
       return results;
     } catch (error) {
-      throw new Error(`Erreur synchronisation utilisateurs: ${error.message}`);
+      throw new Error(`Erreur export utilisateurs vers Firebase: ${error.message}`);
     }
+  }
+
+  /**
+   * Synchroniser les utilisateurs (bidirectionnel - pour compatibilité)
+   */
+  static async syncUsers() {
+    // Par défaut, faire un export (PostgreSQL → Firebase)
+    return await this.exportUsersToFirestore();
   }
 
   /**
