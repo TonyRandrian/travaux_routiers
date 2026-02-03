@@ -65,7 +65,8 @@ function normalizeSignalement(doc: any): Signalement {
     entreprise,
     photos,
     postgres_id: data.postgres_id,
-    synced_at: data.synced_at
+    synced_at: data.synced_at,
+    pourcentage_completion: data.pourcentage_completion || 0
   };
 }
 

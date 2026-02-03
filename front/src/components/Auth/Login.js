@@ -39,7 +39,7 @@ function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitor
           setError('Aucun compte trouvé avec cet email');
           break;
         case 'auth/wrong-password':
-          setError('Mot de passe incorrect');
+          setError('Email ou mot de passe incorrect');
           break;
         case 'auth/invalid-email':
           setError('Email invalide');
@@ -47,8 +47,20 @@ function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitor
         case 'auth/too-many-requests':
           setError('Trop de tentatives. Réessayez plus tard');
           break;
+        case 'auth/user-blocked':
+          setError('Compte bloqué. Contactez un administrateur.');
+          break;
         default:
-          setError('Erreur lors de la connexion');
+          // Afficher le message d'erreur du serveur si disponible
+          if (error.message) {
+            setError(error.message);
+          } else {
+            setError('Erreur lors de la connexion');
+          }
+          // Afficher les tentatives restantes si disponibles
+          if (error.tentatives_restantes !== undefined) {
+            setError(prev => `${prev} (${error.tentatives_restantes} tentative(s) restante(s))`);
+          }
       }
     }
     setLoading(false);

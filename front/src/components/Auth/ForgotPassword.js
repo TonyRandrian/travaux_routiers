@@ -17,7 +17,7 @@ function ForgotPassword({ onBackToLogin }) {
       setError('');
       setLoading(true);
       await resetPassword(email);
-      setMessage('Consultez votre boîte mail pour les instructions de réinitialisation');
+      setMessage('Si un compte existe avec cet email, vous recevrez les instructions de réinitialisation');
     } catch (error) {
       console.error(error);
       switch (error.code) {
@@ -28,7 +28,8 @@ function ForgotPassword({ onBackToLogin }) {
           setError('Email invalide');
           break;
         default:
-          setError('Erreur lors de l\'envoi de l\'email');
+          // Afficher le message du serveur si disponible
+          setError(error.message || 'Erreur lors de l\'envoi de l\'email');
       }
     }
     setLoading(false);

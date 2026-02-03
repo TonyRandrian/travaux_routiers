@@ -100,9 +100,9 @@ class SyncService {
                 titre, description, latitude, longitude, 
                 surface_m2, budget, id_statut_signalement, 
                 id_utilisateur, id_entreprise, firebase_id, 
-                date_signalement, synced_at
+                date_signalement, pourcentage_completion, synced_at
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
               RETURNING id
             `, [
               pgData.titre,
@@ -115,7 +115,8 @@ class SyncService {
               pgData.id_utilisateur,
               pgData.id_entreprise,
               firestoreId,
-              pgData.date_signalement
+              pgData.date_signalement,
+              pgData.pourcentage_completion || 0
             ]);
 
             // Ajouter l'historique du statut
@@ -185,6 +186,7 @@ class SyncService {
           s.date_signalement,
           s.firebase_id,
           s.synced_at,
+          s.pourcentage_completion,
           ss.code as statut_code,
           ss.libelle as statut,
           e.nom as entreprise,
@@ -539,6 +541,7 @@ class SyncService {
       date_signalement: firestoreData.date_signalement || firestoreData.createdAt || new Date().toISOString(),
       firebase_id: firestoreId,
       photos: firestoreData.photos || [] // Photos du signalement
+      pourcentage_completion: firestoreData.pourcentage_completion || 0
     };
   }
 
@@ -553,27 +556,14 @@ class SyncService {
       longitude: parseFloat(pgData.longitude) || 0,
       surface_m2: pgData.surface_m2 ? parseFloat(pgData.surface_m2) : null,
       budget: pgData.budget ? parseFloat(pgData.budget) : null,
-      statut: {
-        id: pgData.id_statut || 1,
-        code: pgData.statut_code || 'NOUVEAU',
-        libelle: pgData.statut || 'Nouveau'
-      },
-      statut_code: pgData.statut_code || 'NOUVEAU', // Compatibilité ancien format
-      entreprise: pgData.entreprise ? {
-        id: pgData.id_entreprise,
-        nom: pgData.entreprise,
-        contact: pgData.entreprise_contact || null
-      } : null,
-      utilisateur: pgData.utilisateur_email ? {
-        id: pgData.id_utilisateur,
-        email: pgData.utilisateur_email,
-        nom: pgData.utilisateur_nom || '',
-        prenom: pgData.utilisateur_prenom || ''
-      } : null,
-      utilisateur_email: pgData.utilisateur_email || null, // Compatibilité
-      date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-      photos: pgData.photos || [], // Photos synchronisées
-      postgres_id: pgData.id,
+      statut_code: pgData.statut_code || 'NOUVEAU',
+      statut: pgData.statut || 'Nouveau',
+      entreprise: pgData.entreprise || null,
+      entreprise_contact: pgData.entreprise_contact || null,
+      utilisateur_email: pgData.utilisateur_email || null,
+      date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString() : new Date().toISOString(),
+      pg_id: pgData.id,
+      pourcentage_completion: pgData.pourcentage_completion ? parseFloat(pgData.pourcentage_completion) : 0,
       updatedAt: new Date().toISOString(),
       syncedFromServer: true
     };

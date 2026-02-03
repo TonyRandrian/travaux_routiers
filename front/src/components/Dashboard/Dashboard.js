@@ -1,7 +1,7 @@
 import React from 'react';
 import './Dashboard.css';
 
-const Dashboard = ({ stats, loading }) => {
+const Dashboard = ({ stats, loading, statistiquesTraitement, loadingTraitement }) => {
   if (loading) {
     return (
       <div className="dashboard loading">
@@ -20,6 +20,12 @@ const Dashboard = ({ stats, loading }) => {
       currency: 'MGA',
       minimumFractionDigits: 0
     }).format(amount);
+  };
+
+  const formatDelai = (jours) => {
+    if (jours === null || jours === undefined) return 'N/A';
+    const joursFormattes = Math.round(jours);
+    return `${joursFormattes} jour${joursFormattes > 1 ? 's' : ''}`;
   };
 
   return (
@@ -85,6 +91,52 @@ const Dashboard = ({ stats, loading }) => {
             <span className="status-count">{stats.termines || 0}</span>
           </div>
         </div>
+      </div>
+
+      {/* Tableau des statistiques de traitement par entreprise */}
+      <div className="traitement-stats">
+        <h4>📊 Délai de traitement moyen des travaux par entreprise</h4>
+        
+        {loadingTraitement ? (
+          <div className="loading-spinner">Chargement des statistiques de traitement...</div>
+        ) : statistiquesTraitement && statistiquesTraitement.length > 0 ? (
+          <div className="table-container">
+            <table className="stats-table">
+              <thead>
+                <tr>
+                  <th>Entreprise</th>
+                  <th>Travaux terminés</th>
+                  <th>Délai moyen</th>
+                  <th>Délai min</th>
+                  <th>Délai max</th>
+                  <th>Budget total</th>
+                  <th>Surface totale</th>
+                  <th>Avancement moyen</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statistiquesTraitement.map((stat) => (
+                  <tr key={stat.entreprise_id}>
+                    <td className="entreprise-name">{stat.entreprise_nom}</td>
+                    <td className="text-center">{stat.nombre_signalements_termines}</td>
+                    <td className="delai-moyen">{formatDelai(stat.delai_moyen_jours)}</td>
+                    <td className="text-center">{formatDelai(stat.delai_min_jours)}</td>
+                    <td className="text-center">{formatDelai(stat.delai_max_jours)}</td>
+                    <td className="budget">{formatCurrency(stat.budget_total || 0)}</td>
+                    <td className="text-center">{formatNumber(stat.surface_totale_m2 || 0)} m²</td>
+                    <td className="text-center">
+                      <span className="avancement-badge">{parseFloat(stat.avancement_moyen || 0).toFixed(1)}%</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="no-data">
+            <p>Aucune donnée de traitement disponible</p>
+          </div>
+        )}
       </div>
     </div>
   );

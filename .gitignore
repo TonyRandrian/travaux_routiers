@@ -73,3 +73,7 @@ Thumbs.db
 *.zip
 *.bak
 .certificate
+commande.txt
+./back-api/node_modules
+./font/note_modules
+./osm/*

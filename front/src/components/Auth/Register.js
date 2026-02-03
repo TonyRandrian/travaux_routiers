@@ -56,7 +56,8 @@ function Register({ onSwitchToLogin }) {
           setError('Le mot de passe est trop faible');
           break;
         default:
-          setError('Erreur lors de l\'inscription');
+          // Afficher le message d'erreur du serveur si disponible
+          setError(error.message || 'Erreur lors de l\'inscription');
       }
     }
     setLoading(false);

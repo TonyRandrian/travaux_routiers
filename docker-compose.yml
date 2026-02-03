@@ -9,6 +9,16 @@ services:
       - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Scripts SQL exécutés automatiquement lors de l'initialisation de la base
+      - ./back-api/database/init.sql:/docker-entrypoint-initdb.d/00-init.sql
+      - ./back-api/database/combined_script.sql:/docker-entrypoint-initdb.d/combined_script.sql
+      - ./back-api/database/add_pourcentage_to_signalement.sql:/docker-entrypoint-initdb.d/add_pourcentage_to_signalement.sql
+      - ./back-api/database/migration_sync.sql:/docker-entrypoint-initdb.d/migration_sync.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-travaux_routiers}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   back-api:
     build: ./back-api
@@ -33,7 +43,8 @@ services:
       - ./back-api:/app
       - /app/node_modules
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   front:
     build: ./front

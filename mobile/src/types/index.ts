@@ -62,6 +62,7 @@ export interface Signalement {
   photos?: PhotoSignalement[];          // Liste des photos du signalement
   postgres_id?: number;                 // ID dans PostgreSQL pour sync
   synced_at?: string | null;            // Timestamp de dernière sync
+  pourcentage_completion?: number;      // Pourcentage de complétion (0-100)
 }
 
 export interface Stats {

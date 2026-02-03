@@ -22,6 +22,7 @@ router.get('/', async (req, res) => {
         s.date_signalement,
         s.id_statut_signalement,
         s.id_entreprise,
+        s.pourcentage_completion,
         ss.code as statut_code,
         ss.libelle as statut,
         e.nom as entreprise,
@@ -77,6 +78,32 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// GET - Statistiques de traitement par entreprise (Dashboard)
+// IMPORTANT: Cette route doit être AVANT /:id pour ne pas être interceptée
+router.get('/statistiques/traitement', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        entreprise_id,
+        entreprise_nom,
+        nombre_signalements_termines,
+        ROUND(delai_moyen_jours::numeric, 2) as delai_moyen_jours,
+        delai_min_jours,
+        delai_max_jours,
+        budget_total,
+        surface_totale_m2,
+        ROUND(avancement_moyen::numeric, 2) as avancement_moyen
+      FROM v_statistiques_traitement
+      ORDER BY entreprise_nom
+    `);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération statistiques traitement:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET - Récupérer un signalement par ID
 router.get('/:id', async (req, res) => {
   try {
@@ -119,11 +146,14 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
     );
     const id_statut = statutResult.rows[0]?.id || 1;
     
+    // Nouveau signalement = 0% d'avancement
+    const pourcentage_completion = 0;
+    
     const result = await pool.query(`
-      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, pourcentage_completion)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
-    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise]);
+    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise, pourcentage_completion]);
     
     // Ajouter l'historique du statut
     await pool.query(`
@@ -152,6 +182,21 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
     const currentResult = await pool.query('SELECT id_statut_signalement FROM signalement WHERE id = $1', [id]);
     const currentStatut = currentResult.rows[0]?.id_statut_signalement;
     
+    // Déterminer le pourcentage d'avancement selon le statut
+    let pourcentage_completion = null;
+    if (id_statut_signalement) {
+      const statutInfo = await pool.query('SELECT code FROM statut_signalement WHERE id = $1', [id_statut_signalement]);
+      const statutCode = statutInfo.rows[0]?.code;
+      
+      if (statutCode === 'NOUVEAU') {
+        pourcentage_completion = 0;
+      } else if (statutCode === 'EN_COURS') {
+        pourcentage_completion = 50;
+      } else if (statutCode === 'TERMINE') {
+        pourcentage_completion = 100;
+      }
+    }
+    
     const result = await pool.query(`
       UPDATE signalement 
       SET titre = COALESCE($1, titre),
@@ -159,10 +204,11 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
           surface_m2 = COALESCE($3, surface_m2),
           budget = COALESCE($4, budget),
           id_statut_signalement = COALESCE($5, id_statut_signalement),
-          id_entreprise = COALESCE($6, id_entreprise)
-      WHERE id = $7
+          id_entreprise = COALESCE($6, id_entreprise),
+          pourcentage_completion = COALESCE($7, pourcentage_completion)
+      WHERE id = $8
       RETURNING *
-    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, id]);
+    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion, id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Signalement non trouvé' });

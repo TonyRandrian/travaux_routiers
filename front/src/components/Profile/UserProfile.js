@@ -47,11 +47,7 @@ function UserProfile({ onClose }) {
       setSuccess('Profil mis à jour avec succès !');
     } catch (error) {
       console.error(error);
-      if (error.code === 'auth/requires-recent-login') {
-        setError('Veuillez vous reconnecter pour modifier votre email');
-      } else {
-        setError('Erreur lors de la mise à jour du profil');
-      }
+      setError(error.message || 'Erreur lors de la mise à jour du profil');
     }
     setLoading(false);
   }
@@ -76,11 +72,7 @@ function UserProfile({ onClose }) {
       setPasswordData({ newPassword: '', confirmPassword: '' });
     } catch (error) {
       console.error(error);
-      if (error.code === 'auth/requires-recent-login') {
-        setError('Veuillez vous reconnecter pour modifier votre mot de passe');
-      } else {
-        setError('Erreur lors de la modification du mot de passe');
-      }
+      setError(error.message || 'Erreur lors de la modification du mot de passe');
     }
     setLoading(false);
   }
