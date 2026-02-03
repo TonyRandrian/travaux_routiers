@@ -1,6 +1,7 @@
 import { initializeApp, FirebaseApp } from 'firebase/app';
 import { getAuth, Auth } from 'firebase/auth';
 import { getFirestore, Firestore } from 'firebase/firestore';
+import { getStorage, FirebaseStorage } from 'firebase/storage';
 
 // Configuration Firebase - Remplacez par vos propres clés
 const firebaseConfig = {
@@ -15,6 +16,7 @@ const firebaseConfig = {
 let app: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
+let storage: FirebaseStorage | null = null;
 
 // Vérifier si Firebase est configuré
 const isFirebaseConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "";
@@ -24,7 +26,8 @@ if (isFirebaseConfigured) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
-    console.log('Firebase initialisé avec succès');
+    storage = getStorage(app);
+    console.log('Firebase initialisé avec succès (Auth, Firestore, Storage)');
   } catch (error) {
     console.error('Erreur initialisation Firebase:', error);
   }
@@ -32,5 +35,5 @@ if (isFirebaseConfigured) {
   console.warn('Firebase non configuré - créez un fichier .env avec vos clés Firebase');
 }
 
-export { auth, db };
+export { auth, db, storage };
 export default app;

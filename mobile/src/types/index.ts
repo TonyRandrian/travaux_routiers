@@ -34,6 +34,18 @@ export interface Entreprise {
   contact?: string;
 }
 
+// Structure pour une photo de signalement
+export interface PhotoSignalement {
+  id?: string;                    // ID unique (auto-généré)
+  url: string;                    // URL publique Firebase Storage
+  firebase_path?: string;         // Chemin dans Firebase Storage
+  nom_fichier?: string;           // Nom original du fichier
+  taille_bytes?: number;          // Taille en bytes
+  mime_type?: string;             // Type MIME (image/jpeg, image/png)
+  ordre: number;                  // Ordre d'affichage
+  created_at?: string;            // Date de création
+}
+
 // Structure Signalement alignée avec PostgreSQL et Firebase
 export interface Signalement {
   id?: string;                          // Firebase document ID (= postgres id en string)
@@ -47,6 +59,7 @@ export interface Signalement {
   statut: StatutSignalement;            // Objet imbriqué
   utilisateur: SignalementUtilisateur;  // Objet imbriqué
   entreprise: Entreprise | null;        // Objet imbriqué ou null
+  photos?: PhotoSignalement[];          // Liste des photos du signalement
   postgres_id?: number;                 // ID dans PostgreSQL pour sync
   synced_at?: string | null;            // Timestamp de dernière sync
   pourcentage_completion?: number;      // Pourcentage de complétion (0-100)

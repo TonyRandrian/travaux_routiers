@@ -18,11 +18,10 @@ export interface Entreprise {
   contact?: string;
 }
 
-// Données en dur pour les tests (fallback)
 const STATUTS_FALLBACK: StatutSignalement[] = [
-  { id: 1, code: 'NOUVEAU', libelle: 'Nouveau (en dur)', couleur: '#f44336' },
-  { id: 2, code: 'EN_COURS', libelle: 'En cours (en dur)', couleur: '#FF9800' },
-  { id: 3, code: 'TERMINE', libelle: 'Terminé (en dur)', couleur: '#4CAF50' }
+  { id: 1, code: 'NOUVEAU', libelle: 'Nouveau', couleur: '#f44336' },
+  { id: 2, code: 'EN_COURS', libelle: 'En cours', couleur: '#FF9800' },
+  { id: 3, code: 'TERMINE', libelle: 'Terminé', couleur: '#4CAF50' }
 ];
 
 const ENTREPRISES_FALLBACK: Entreprise[] = [

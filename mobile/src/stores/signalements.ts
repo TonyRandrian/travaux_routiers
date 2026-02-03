@@ -10,7 +10,7 @@ import {
   Unsubscribe
 } from 'firebase/firestore';
 import { db } from '@/config/firebase';
-import type { Signalement, Stats, SignalementUtilisateur, StatutSignalement } from '@/types';
+import type { Signalement, Stats, SignalementUtilisateur, StatutSignalement, PhotoSignalement } from '@/types';
 import { useReferentielsStore } from '@/stores/referentiels';
 
 // Fonction pour normaliser un signalement (supporte format plat et imbriqué)
@@ -47,6 +47,9 @@ function normalizeSignalement(doc: any): Signalement {
   if (!entreprise && data.id_entreprise) {
     entreprise = referentielsStore.getEntrepriseById(data.id_entreprise);
   }
+
+  // Normaliser les photos
+  const photos: PhotoSignalement[] = Array.isArray(data.photos) ? data.photos : [];
   
   return {
     id: doc.id || data.id,
@@ -60,6 +63,7 @@ function normalizeSignalement(doc: any): Signalement {
     statut,
     utilisateur,
     entreprise,
+    photos,
     postgres_id: data.postgres_id,
     synced_at: data.synced_at,
     pourcentage_completion: data.pourcentage_completion || 0
@@ -167,6 +171,7 @@ export const useSignalementsStore = defineStore('signalements', () => {
       longitude: number;
       surface_m2?: number | null;
       budget?: number | null;
+      photos?: PhotoSignalement[];
     },
     utilisateur: SignalementUtilisateur,
     entreprise?: { id: number; nom: string; contact?: string } | null
@@ -201,8 +206,8 @@ export const useSignalementsStore = defineStore('signalements', () => {
           nom: entreprise.nom,
           contact: entreprise.contact
         } : null,
-        synced_at: null,   // Pas encore synchronisé
-        pourcentage_completion: 0  // 0% au début
+        photos: data.photos || [],  // Photos du signalement
+        synced_at: null   // Pas encore synchronisé
       };
 
       const docRef = await addDoc(signalementsRef, newSignalement);
