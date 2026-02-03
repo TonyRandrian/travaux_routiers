@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "447064352618",
+    "project_id": "travaux-routiers",
+    "storage_bucket": "travaux-routiers.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:447064352618:android:d846a77dc20b60f6f72713",
+        "android_client_info": {
+          "package_name": "mg.travaux.routiers"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTnUYTVLZBhE8BdyXuG9ua4QQ810ucVls"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

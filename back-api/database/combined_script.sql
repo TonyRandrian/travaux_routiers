@@ -1,10 +1,10 @@
-CREATE TABLE role (
+CREATE TABLE IF NOT EXISTS role (
     id SERIAL PRIMARY KEY,
     code VARCHAR(20) UNIQUE NOT NULL, -- VISITEUR, USER, MANAGER
     libelle VARCHAR(50)
 );
 
-CREATE TABLE utilisateur (
+CREATE TABLE IF NOT EXISTS utilisateur (
     id SERIAL PRIMARY KEY,
     email VARCHAR(100) UNIQUE NOT NULL,
     mot_de_passe TEXT NOT NULL,
@@ -16,19 +16,19 @@ CREATE TABLE utilisateur (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE entreprise (
+CREATE TABLE IF NOT EXISTS entreprise (
     id SERIAL PRIMARY KEY,
     nom VARCHAR(150) NOT NULL,
     contact VARCHAR(100)
 );
 
-CREATE TABLE statut_signalement(
+CREATE TABLE IF NOT EXISTS statut_signalement(
     id SERIAL PRIMARY KEY,
     code VARCHAR(20) UNIQUE NOT NULL, -- NOUVEAU, EN_COURS, TERMINE
     libelle VARCHAR(50)
 );
 
-CREATE TABLE signalement (
+CREATE TABLE IF NOT EXISTS signalement (
     id SERIAL PRIMARY KEY,
     titre VARCHAR(150),
     description TEXT,
@@ -50,37 +50,41 @@ CREATE INDEX IF NOT EXISTS idx_signalement_firebase_id ON signalement(firebase_i
 -- Créer un index pour les signalements non synchronisés
 CREATE INDEX IF NOT EXISTS idx_signalement_synced_at ON signalement(synced_at);
 
-CREATE TABLE signalement_statut(
+CREATE TABLE IF NOT EXISTS signalement_statut(
     id SERIAL PRIMARY KEY,
     id_signalement INT REFERENCES signalement(id),
     id_statut_signalement INT REFERENCES statut_signalement(id),
     date_changement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Données initiales
+-- Données initiales (INSERT IGNORE pour éviter les doublons)
 
 -- Rôles
 INSERT INTO role (code, libelle) VALUES 
 ('VISITEUR', 'Visiteur'),
 ('USER', 'Utilisateur'),
-('MANAGER', 'Manager');
+('MANAGER', 'Manager')
+ON CONFLICT (code) DO NOTHING;
 
 -- Statuts des signalements
 INSERT INTO statut_signalement (code, libelle) VALUES 
 ('NOUVEAU', 'Nouveau'),
 ('EN_COURS', 'En cours'),
-('TERMINE', 'Terminé');
+('TERMINE', 'Terminé')
+ON CONFLICT (code) DO NOTHING;
 
 -- Entreprises de travaux
 INSERT INTO entreprise (nom, contact) VALUES 
 ('COLAS Madagascar', 'colas@example.mg'),
 ('SOGEA SATOM', 'sogea@example.mg'),
 ('EIFFAGE Madagascar', 'eiffage@example.mg'),
-('ENTREPRISE GÉNÉRALE', 'general@example.mg');
+('ENTREPRISE GÉNÉRALE', 'general@example.mg')
+ON CONFLICT DO NOTHING;
 
 -- Utilisateur Manager par défaut (mot de passe: manager123)
 INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role) VALUES 
-('manager@example.mg', 'manager', 'Admin', 'Manager', 3);
+('manager@example.mg', 'manager', 'Admin', 'Manager', 3)
+ON CONFLICT (email) DO NOTHING;
 
 -- Signalements de test pour Antananarivo
 INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, date_signalement) VALUES 
@@ -89,4 +93,5 @@ INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, bu
 ('Travaux finalisés Isoraka', 'Réfection complète de la chaussée terminée', -18.8850, 47.5150, 200.0, 75000000, 3, 1, 2, '2025-12-20'),
 ('Effondrement partiel Andravoahangy', 'Affaissement de la route suite aux pluies', -18.9050, 47.5350, 35.0, 15000000, 2, 1, 3, '2026-01-18'),
 ('Fissures rue Rainitovo', 'Multiples fissures sur la chaussée', -18.8950, 47.5200, 80.0, 12000000, 1, 1, NULL, '2026-01-19'),
-('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15');
+('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15')
+ON CONFLICT DO NOTHING;

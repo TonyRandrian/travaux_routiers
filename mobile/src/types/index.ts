@@ -10,6 +10,7 @@ export interface User {
   bloque: boolean;
   createdAt: string;
   updatedAt?: string;
+  fcmTokens?: string[];  // Liste des tokens FCM pour les notifications push
 }
 
 // Structure imbriquée pour le statut

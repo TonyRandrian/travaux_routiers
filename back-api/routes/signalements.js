@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/database');
 const { authenticateToken, requireManager, optionalAuth, requireUser } = require('../middleware/auth');
+const NotificationService = require('../services/notificationService');
 
 // ============================================
 // ROUTES PUBLIQUES (Visiteurs + Utilisateurs)
@@ -152,23 +153,38 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
     const { id } = req.params;
     const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise } = req.body;
     
-    // Récupérer le statut actuel
-    const currentResult = await pool.query('SELECT id_statut_signalement FROM signalement WHERE id = $1', [id]);
+    // Récupérer le statut actuel et les infos du signalement
+    const currentResult = await pool.query(`
+      SELECT s.id_statut_signalement, s.titre, u.email as utilisateur_email
+      FROM signalement s
+      LEFT JOIN utilisateur u ON s.id_utilisateur = u.id
+      WHERE s.id = $1
+    `, [id]);
     const currentStatut = currentResult.rows[0]?.id_statut_signalement;
+    const signalementTitre = currentResult.rows[0]?.titre;
+    const utilisateurEmail = currentResult.rows[0]?.utilisateur_email;
     
     // Déterminer le pourcentage d'avancement selon le statut
     let pourcentage_completion = null;
+    let newStatutCode = null;
     if (id_statut_signalement) {
       const statutInfo = await pool.query('SELECT code FROM statut_signalement WHERE id = $1', [id_statut_signalement]);
-      const statutCode = statutInfo.rows[0]?.code;
+      newStatutCode = statutInfo.rows[0]?.code;
       
-      if (statutCode === 'NOUVEAU') {
+      if (newStatutCode === 'NOUVEAU') {
         pourcentage_completion = 0;
-      } else if (statutCode === 'EN_COURS') {
+      } else if (newStatutCode === 'EN_COURS') {
         pourcentage_completion = 50;
-      } else if (statutCode === 'TERMINE') {
+      } else if (newStatutCode === 'TERMINE') {
         pourcentage_completion = 100;
       }
+    }
+    
+    // Récupérer le nom de l'entreprise si assignée
+    let entrepriseNom = null;
+    if (id_entreprise) {
+      const entrepriseResult = await pool.query('SELECT nom FROM entreprise WHERE id = $1', [id_entreprise]);
+      entrepriseNom = entrepriseResult.rows[0]?.nom;
     }
     
     const result = await pool.query(`
@@ -188,12 +204,28 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
       return res.status(404).json({ error: 'Signalement non trouvé' });
     }
     
-    // Si le statut a changé, ajouter à l'historique
+    // Si le statut a changé, ajouter à l'historique et envoyer une notification
     if (id_statut_signalement && id_statut_signalement !== currentStatut) {
       await pool.query(`
         INSERT INTO signalement_statut (id_signalement, id_statut_signalement)
         VALUES ($1, $2)
       `, [id, id_statut_signalement]);
+      
+      // Envoyer une notification push à l'utilisateur
+      if (utilisateurEmail && newStatutCode && newStatutCode !== 'NOUVEAU') {
+        try {
+          const notifResult = await NotificationService.notifyStatusChange(
+            utilisateurEmail,
+            { id, titre: signalementTitre || titre },
+            newStatutCode,
+            entrepriseNom
+          );
+          console.log('Notification envoyée:', notifResult);
+        } catch (notifError) {
+          console.error('Erreur envoi notification:', notifError);
+          // Ne pas bloquer la mise à jour si la notification échoue
+        }
+      }
     }
     
     res.json(result.rows[0]);
