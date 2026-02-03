@@ -1,16 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signOut, 
-  onAuthStateChanged,
-  updateProfile,
-  updateEmail,
-  updatePassword,
-  sendPasswordResetEmail
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../config/firebase';
 import config from '../config/config';
 
 // Constantes des rôles
@@ -32,148 +20,116 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [isVisitor, setIsVisitor] = useState(false);
 
-  // Récupérer le rôle depuis le backend PostgreSQL
-  async function fetchUserRoleFromBackend(email) {
-    try {
-      const token = await auth.currentUser?.getIdToken();
-      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/me`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.ok) {
-        const userData = await response.json();
-        return userData.role_code || userData.role || ROLES.USER;
-      }
-      return ROLES.USER;
-    } catch (error) {
-      console.error('Erreur récupération rôle backend:', error);
-      return ROLES.USER;
-    }
-  }
-
-  // Inscription
-  async function signup(email, password, displayName, additionalInfo = {}) {
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const user = userCredential.user;
-
-    // Mettre à jour le profil Firebase Auth
-    await updateProfile(user, { displayName });
-
-    // Créer le profil utilisateur dans Firestore
-    const userDocRef = doc(db, 'users', user.uid);
-    const userData = {
-      uid: user.uid,
-      email: email,
-      displayName: displayName,
-      phone: additionalInfo.phone || '',
-      address: additionalInfo.address || '',
-      role: ROLES.USER, // Par défaut, utilisateur normal
-      tentatives: 0,    // Compteur de tentatives de connexion
-      bloque: false,    // Statut de blocage
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    
-    try {
-      await setDoc(userDocRef, userData);
-      
-      // Créer aussi un document dans usersByEmail pour le lookup par email (mobile)
-      const emailDocRef = doc(db, 'usersByEmail', email.toLowerCase());
-      await setDoc(emailDocRef, {
-        uid: user.uid,
-        email: email.toLowerCase(),
-        bloque: false
-      });
-      
-      setUserProfile(userData);
-    } catch (error) {
-      console.error('Erreur création profil Firestore:', error);
-      // En cas d'erreur, définir quand même le profil localement
-      setUserProfile(userData);
-    }
-
-    return userCredential;
-  }
-
-  // Connexion - essaie d'abord Firebase, puis PostgreSQL si échec
-  async function login(email, password) {
-    // 1. Essayer d'abord Firebase
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      
-      // Récupérer le profil avec le rôle immédiatement après connexion
-      const profile = await fetchUserProfile(user.uid, { email: user.email, displayName: user.displayName });
-      
-      return { user: userCredential.user, userProfile: profile, isFirebaseUser: true };
-    } catch (firebaseError) {
-      console.log('Firebase auth failed, trying PostgreSQL...', firebaseError.code);
-      
-      // 2. Si Firebase échoue, essayer PostgreSQL
+  // Récupérer le token d'accès stocké
+  function getAccessToken() {
+    const savedProfile = localStorage.getItem('pgUserProfile');
+    if (savedProfile) {
       try {
-        const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, mot_de_passe: password })
-        });
-        
-        const data = await response.json();
-        
-        if (!response.ok) {
-          // Si PostgreSQL échoue aussi, retourner l'erreur Firebase originale
-          throw firebaseError;
-        }
-        
-        // Connexion PostgreSQL réussie
-        // Stocker le token et les infos utilisateur
-        const pgUser = data.user;
-        const role = pgUser.role_code || pgUser.role || ROLES.USER;
-        
-        // Créer un profil local pour l'utilisateur PostgreSQL
-        const userObj = { 
-          uid: `pg_${pgUser.id}`,
-          email: pgUser.email,
-          displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
-          accessToken: data.accessToken,
-          refreshToken: data.refreshToken,
-          isPostgresUser: true
-        };
-        setCurrentUser(userObj);
-        
-        const profileObj = {
-          uid: `pg_${pgUser.id}`,
-          id: pgUser.id,
-          email: pgUser.email,
-          displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
-          role: role,
-          isPostgresUser: true,
-          accessToken: data.accessToken
-        };
-        setUserProfile(profileObj);
-        
-        // Sauvegarder la session PostgreSQL dans localStorage
-        localStorage.setItem('pgUser', JSON.stringify(userObj));
-        localStorage.setItem('pgUserProfile', JSON.stringify(profileObj));
-        
-        return { user: pgUser, userProfile: profileObj, isPostgresUser: true };
-      } catch (pgError) {
-        console.error('PostgreSQL auth also failed:', pgError);
-        // Relancer l'erreur Firebase originale pour afficher le bon message
-        throw firebaseError;
+        const profile = JSON.parse(savedProfile);
+        return profile.accessToken;
+      } catch (e) {
+        return null;
       }
     }
+    return userProfile?.accessToken || null;
+  }
+
+  // Inscription via PostgreSQL
+  async function signup(email, password, displayName, additionalInfo = {}) {
+    const nameParts = displayName.split(' ');
+    const prenom = nameParts[0] || '';
+    const nom = nameParts.slice(1).join(' ') || '';
+
+    const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        email, 
+        mot_de_passe: password,
+        nom: nom,
+        prenom: prenom
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const error = new Error(data.error || 'Erreur lors de l\'inscription');
+      if (data.error && data.error.includes('déjà utilisé')) {
+        error.code = 'auth/email-already-in-use';
+      }
+      throw error;
+    }
+
+    // Après inscription, connecter automatiquement l'utilisateur
+    return await login(email, password);
+  }
+
+  // Connexion via PostgreSQL uniquement
+  async function login(email, password) {
+    const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, mot_de_passe: password })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const error = new Error(data.error || 'Erreur lors de la connexion');
+      if (data.bloque) {
+        error.code = 'auth/user-blocked';
+      } else if (response.status === 401) {
+        error.code = 'auth/wrong-password';
+      }
+      error.tentatives_restantes = data.tentatives_restantes;
+      throw error;
+    }
+
+    // Connexion réussie
+    const pgUser = data.user;
+    const role = pgUser.role_code || pgUser.role || ROLES.USER;
+
+    // Créer un objet utilisateur local
+    const userObj = { 
+      uid: `pg_${pgUser.id}`,
+      id: pgUser.id,
+      email: pgUser.email,
+      displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken
+    };
+    setCurrentUser(userObj);
+
+    const profileObj = {
+      uid: `pg_${pgUser.id}`,
+      id: pgUser.id,
+      email: pgUser.email,
+      displayName: `${pgUser.prenom || ''} ${pgUser.nom || ''}`.trim() || pgUser.email,
+      nom: pgUser.nom,
+      prenom: pgUser.prenom,
+      role: role,
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken
+    };
+    setUserProfile(profileObj);
+
+    // Sauvegarder la session dans localStorage
+    localStorage.setItem('pgUser', JSON.stringify(userObj));
+    localStorage.setItem('pgUserProfile', JSON.stringify(profileObj));
+
+    return { user: pgUser, userProfile: profileObj };
   }
 
   // Déconnexion
   function logout() {
+    setCurrentUser(null);
     setUserProfile(null);
     setIsVisitor(false);
-    // Nettoyer la session PostgreSQL du localStorage
+    // Nettoyer la session du localStorage
     localStorage.removeItem('pgUser');
     localStorage.removeItem('pgUserProfile');
-    return signOut(auth);
+    return Promise.resolve();
   }
 
   // Mode visiteur (sans connexion)
@@ -193,129 +149,145 @@ export function AuthProvider({ children }) {
     setUserProfile(null);
   }
 
-  // Réinitialisation du mot de passe
-  function resetPassword(email) {
-    return sendPasswordResetEmail(auth, email);
+  // Réinitialisation du mot de passe (via backend)
+  async function resetPassword(email) {
+    const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/reset-password-request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      const error = new Error(data.error || 'Erreur lors de la demande de réinitialisation');
+      if (response.status === 404) {
+        error.code = 'auth/user-not-found';
+      }
+      throw error;
+    }
+
+    return response.json();
   }
 
-  // Mise à jour du profil utilisateur
+  // Mise à jour du profil utilisateur via PostgreSQL
   async function updateUserProfile(updates) {
     if (!currentUser) throw new Error("Aucun utilisateur connecté");
 
-    const userDocRef = doc(db, 'users', currentUser.uid);
-    
-    // Mettre à jour Firebase Auth si nécessaire
-    if (updates.displayName) {
-      await updateProfile(currentUser, { displayName: updates.displayName });
-    }
-    if (updates.email && updates.email !== currentUser.email) {
-      await updateEmail(currentUser, updates.email);
+    const token = getAccessToken();
+    if (!token) throw new Error("Session expirée");
+
+    const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/profile`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        nom: updates.nom || updates.displayName?.split(' ').slice(1).join(' '),
+        prenom: updates.prenom || updates.displayName?.split(' ')[0],
+        email: updates.email
+      })
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Erreur lors de la mise à jour du profil');
     }
 
-    // Mettre à jour Firestore
-    const firestoreUpdates = {
+    // Mettre à jour l'état local
+    const updatedProfile = {
+      ...userProfile,
       ...updates,
       updatedAt: new Date().toISOString()
     };
-    await updateDoc(userDocRef, firestoreUpdates);
+    setUserProfile(updatedProfile);
+    localStorage.setItem('pgUserProfile', JSON.stringify(updatedProfile));
 
-    // Mettre à jour l'état local
-    setUserProfile(prev => ({ ...prev, ...firestoreUpdates }));
+    return updatedProfile;
   }
 
-  // Mise à jour du mot de passe
+  // Mise à jour du mot de passe via PostgreSQL
   async function changePassword(newPassword) {
     if (!currentUser) throw new Error("Aucun utilisateur connecté");
-    return updatePassword(currentUser, newPassword);
+
+    const token = getAccessToken();
+    if (!token) throw new Error("Session expirée");
+
+    const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/change-password`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ nouveau_mot_de_passe: newPassword })
+    });
+
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || 'Erreur lors du changement de mot de passe');
+    }
+
+    return response.json();
   }
 
-  // Récupérer le profil utilisateur depuis Firestore
-  async function fetchUserProfile(uid, userInfo = {}) {
+  // Rafraîchir le token d'accès
+  async function refreshAccessToken() {
+    const savedProfile = localStorage.getItem('pgUserProfile');
+    if (!savedProfile) return false;
+
     try {
-      const userDocRef = doc(db, 'users', uid);
-      const userDoc = await getDoc(userDocRef);
-      
-      // Récupérer le rôle depuis le backend
-      const backendRole = await fetchUserRoleFromBackend(userInfo.email || auth.currentUser?.email);
-      
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        // Priorité au rôle du backend PostgreSQL
-        const profileWithRole = { 
-          ...data, 
-          role: backendRole,
-          isVisitor: false 
-        };
-        setUserProfile(profileWithRole);
-        return profileWithRole;
+      const profile = JSON.parse(savedProfile);
+      const response = await fetch(`${config.api.baseUrl}/api/utilisateurs/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: profile.refreshToken })
+      });
+
+      if (!response.ok) {
+        // Token expiré, déconnecter l'utilisateur
+        logout();
+        return false;
       }
-      // Si le document n'existe pas, créer un profil par défaut
-      const defaultProfile = {
-        uid: uid,
-        email: userInfo.email || auth.currentUser?.email || '',
-        displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
-        role: backendRole,
-        isVisitor: false,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(userDocRef, defaultProfile);
-      setUserProfile(defaultProfile);
-      return defaultProfile;
-    } catch (error) {
-      console.error('Erreur fetchUserProfile:', error);
-      // En cas d'erreur (offline, etc.), créer un profil temporaire
-      const tempProfile = {
-        uid: uid,
-        email: userInfo.email || auth.currentUser?.email || '',
-        displayName: userInfo.displayName || auth.currentUser?.displayName || 'Utilisateur',
-        role: ROLES.USER,
-        isVisitor: false
-      };
-      setUserProfile(tempProfile);
-      return tempProfile;
+
+      const data = await response.json();
+      
+      // Mettre à jour le token
+      const updatedProfile = { ...profile, accessToken: data.accessToken };
+      const updatedUser = { ...currentUser, accessToken: data.accessToken };
+      
+      setUserProfile(updatedProfile);
+      setCurrentUser(updatedUser);
+      localStorage.setItem('pgUserProfile', JSON.stringify(updatedProfile));
+      localStorage.setItem('pgUser', JSON.stringify(updatedUser));
+
+      return true;
+    } catch (e) {
+      console.error('Erreur refresh token:', e);
+      return false;
     }
   }
 
   useEffect(() => {
     setLoading(true);
-    
-    // Vérifier d'abord s'il y a une session PostgreSQL sauvegardée
+
+    // Vérifier s'il y a une session sauvegardée
     const savedPgUser = localStorage.getItem('pgUser');
     const savedPgProfile = localStorage.getItem('pgUserProfile');
-    
+
     if (savedPgUser && savedPgProfile) {
       try {
         const pgUser = JSON.parse(savedPgUser);
         const pgProfile = JSON.parse(savedPgProfile);
         setCurrentUser(pgUser);
         setUserProfile(pgProfile);
-        setLoading(false);
-        return; // Ne pas écouter Firebase si session PostgreSQL existe
       } catch (e) {
-        console.error('Erreur parsing session PostgreSQL:', e);
+        console.error('Erreur parsing session:', e);
         localStorage.removeItem('pgUser');
         localStorage.removeItem('pgUserProfile');
       }
     }
-    
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      try {
-        setCurrentUser(user);
-        if (user) {
-          await fetchUserProfile(user.uid, { email: user.email, displayName: user.displayName });
-        } else {
-          setUserProfile(null);
-        }
-      } catch (error) {
-        console.error("Erreur lors de la récupération du profil:", error);
-        setUserProfile(null);
-      } finally {
-        setLoading(false);
-      }
-    });
 
-    return unsubscribe;
+    setLoading(false);
   }, []);
 
   const value = {
@@ -329,7 +301,8 @@ export function AuthProvider({ children }) {
     resetPassword,
     updateUserProfile,
     changePassword,
-    fetchUserProfile,
+    refreshAccessToken,
+    getAccessToken,
     enableVisitorMode,
     exitVisitorMode,
     ROLES

@@ -849,4 +849,148 @@ router.put('/:id/role', authenticateToken, requireManager, async (req, res) => {
   }
 });
 
-module.exports = router;module.exports = router;
+/**
+ * @swagger
+ * /api/utilisateurs/profile:
+ *   put:
+ *     summary: Modifier son propre profil
+ *     tags: [Authentification]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               nom:
+ *                 type: string
+ *               prenom:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Profil modifié avec succès
+ *       401:
+ *         description: Non authentifié
+ */
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const { nom, prenom, email } = req.body;
+    
+    const result = await pool.query(`
+      UPDATE utilisateur 
+      SET nom = COALESCE($1, nom),
+          prenom = COALESCE($2, prenom),
+          email = COALESCE($3, email)
+      WHERE id = $4
+      RETURNING id, email, nom, prenom, created_at
+    `, [nom, prenom, email, req.user.id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Utilisateur non trouvé' });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur mise à jour profil:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs/change-password:
+ *   post:
+ *     summary: Changer son propre mot de passe
+ *     tags: [Authentification]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - nouveau_mot_de_passe
+ *             properties:
+ *               nouveau_mot_de_passe:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Mot de passe modifié avec succès
+ *       401:
+ *         description: Non authentifié
+ */
+router.post('/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { nouveau_mot_de_passe } = req.body;
+    
+    if (!nouveau_mot_de_passe || nouveau_mot_de_passe.length < 6) {
+      return res.status(400).json({ error: 'Le mot de passe doit contenir au moins 6 caractères' });
+    }
+    
+    // Stocker le mot de passe en clair (comme dans le code existant)
+    await pool.query('UPDATE utilisateur SET mot_de_passe = $1 WHERE id = $2', [nouveau_mot_de_passe, req.user.id]);
+    
+    res.json({ message: 'Mot de passe modifié avec succès' });
+  } catch (err) {
+    console.error('Erreur changement mot de passe:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/utilisateurs/reset-password-request:
+ *   post:
+ *     summary: Demander une réinitialisation de mot de passe
+ *     tags: [Authentification]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *     responses:
+ *       200:
+ *         description: Email de réinitialisation envoyé (si le compte existe)
+ *       404:
+ *         description: Aucun compte avec cet email
+ */
+router.post('/reset-password-request', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Vérifier si l'utilisateur existe
+    const result = await pool.query('SELECT id FROM utilisateur WHERE email = $1', [email]);
+    
+    if (result.rows.length === 0) {
+      // Pour des raisons de sécurité, on peut soit retourner 404, soit toujours retourner 200
+      return res.status(404).json({ error: 'Aucun compte trouvé avec cet email' });
+    }
+    
+    // En production, ici on enverrait un email avec un lien de réinitialisation
+    // Pour l'instant, on retourne simplement un message de succès
+    res.json({ 
+      message: 'Si un compte existe avec cet email, vous recevrez les instructions de réinitialisation',
+      // En développement, on pourrait inclure un token temporaire
+      success: true
+    });
+  } catch (err) {
+    console.error('Erreur reset password request:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
