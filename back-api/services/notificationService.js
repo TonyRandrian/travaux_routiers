@@ -136,6 +136,12 @@ class NotificationService {
    * Notifier un utilisateur du changement de statut de son signalement
    */
   static async notifyStatusChange(userEmail, signalement, newStatutCode, entreprise) {
+    console.log('=== NOTIFICATION STATUS CHANGE ===');
+    console.log('Email utilisateur:', userEmail);
+    console.log('Signalement:', signalement);
+    console.log('Nouveau statut:', newStatutCode);
+    console.log('Entreprise:', entreprise);
+    
     // Ne pas notifier pour le statut NOUVEAU
     if (newStatutCode === 'NOUVEAU') {
       console.log('Pas de notification pour statut NOUVEAU');
@@ -144,8 +150,10 @@ class NotificationService {
 
     // Récupérer les tokens de l'utilisateur
     const tokens = await this.getUserFcmTokens(userEmail);
+    console.log('Tokens FCM récupérés:', tokens);
     
     if (tokens.length === 0) {
+      console.log('Aucun token FCM trouvé pour:', userEmail);
       return { success: false, reason: 'Aucun token FCM' };
     }
 

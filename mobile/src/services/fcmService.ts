@@ -1,7 +1,8 @@
 import { PushNotifications, Token, ActionPerformed, PushNotificationSchema } from '@capacitor/push-notifications';
-import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { Capacitor } from '@capacitor/core';
+import { auth } from '@/config/firebase';
 
 /**
  * Service de gestion des notifications push (FCM)
@@ -21,8 +22,11 @@ class FCMService {
    * Initialiser les notifications push
    */
   async initialize(): Promise<void> {
+    console.log('=== FCM INITIALIZE START ===');
+    console.log('Platform native?', this.isSupported());
+    
     if (!this.isSupported()) {
-      console.log('Push notifications non supportées sur cette plateforme');
+      console.log('Push notifications non supportées sur cette plateforme (web/browser)');
       return;
     }
 
@@ -33,23 +37,27 @@ class FCMService {
 
     try {
       // Demander la permission
+      console.log('Demande de permission notifications...');
       const permStatus = await PushNotifications.requestPermissions();
+      console.log('Permission status:', permStatus);
       
       if (permStatus.receive !== 'granted') {
-        console.warn('Permission notifications refusée');
+        console.warn('Permission notifications refusée:', permStatus.receive);
         return;
       }
 
       // S'enregistrer pour les notifications
+      console.log('Enregistrement FCM...');
       await PushNotifications.register();
+      console.log('PushNotifications.register() appelé');
 
       // Écouter les événements
       this.setupListeners();
       
       this.isInitialized = true;
-      console.log('FCM initialisé avec succès');
+      console.log('=== FCM INITIALIZE SUCCESS ===');
     } catch (error) {
-      console.error('Erreur initialisation FCM:', error);
+      console.error('=== FCM INITIALIZE ERROR ===', error);
     }
   }
 
@@ -57,28 +65,34 @@ class FCMService {
    * Configurer les écouteurs d'événements
    */
   private setupListeners(): void {
+    console.log('Configuration des listeners FCM...');
+    
     // Token reçu
     PushNotifications.addListener('registration', (token: Token) => {
-      console.log('FCM Token reçu:', token.value);
+      console.log('=== FCM TOKEN RECEIVED ===');
+      console.log('FCM Token:', token.value);
       this.currentToken = token.value;
     });
 
     // Erreur d'enregistrement
     PushNotifications.addListener('registrationError', (error: any) => {
-      console.error('Erreur enregistrement FCM:', error);
+      console.error('=== FCM REGISTRATION ERROR ===');
+      console.error('Erreur enregistrement FCM:', JSON.stringify(error));
     });
 
     // Notification reçue (app au premier plan)
     PushNotifications.addListener('pushNotificationReceived', (notification: PushNotificationSchema) => {
-      console.log('Notification reçue:', notification);
-      // Ici on peut afficher un toast ou une alerte
+      console.log('=== NOTIFICATION RECEIVED ===');
+      console.log('Notification:', JSON.stringify(notification));
     });
 
     // Action sur une notification (clic)
     PushNotifications.addListener('pushNotificationActionPerformed', (action: ActionPerformed) => {
-      console.log('Action notification:', action);
-      // Ici on peut naviguer vers le signalement concerné
+      console.log('=== NOTIFICATION ACTION ===');
+      console.log('Action:', JSON.stringify(action));
     });
+    
+    console.log('Listeners FCM configurés');
   }
 
   /**
@@ -111,6 +125,7 @@ class FCMService {
 
   /**
    * Sauvegarder le token FCM pour un utilisateur dans Firestore
+   * Cherche le document par EMAIL car c'est plus fiable que l'UID
    */
   async saveTokenForUser(uid: string): Promise<void> {
     if (!db) {
@@ -118,21 +133,68 @@ class FCMService {
       return;
     }
 
+    // Récupérer l'email de l'utilisateur connecté
+    const userEmail = auth?.currentUser?.email;
+    if (!userEmail) {
+      console.warn('Email utilisateur non disponible');
+      return;
+    }
+
     const token = await this.getToken();
     if (!token) {
-      console.warn('Aucun token FCM disponible');
+      console.warn('Aucun token FCM disponible - probablement pas sur un appareil natif');
       return;
     }
 
     try {
-      const userDocRef = doc(db, 'users', uid);
+      console.log('Tentative de sauvegarde du token FCM pour:', userEmail);
       
-      // Ajouter le token à la liste (arrayUnion évite les doublons)
+      // Chercher le document utilisateur par email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', userEmail));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        // Essayer avec email en minuscules
+        const qLower = query(usersRef, where('email', '==', userEmail.toLowerCase()));
+        const snapshotLower = await getDocs(qLower);
+        
+        if (snapshotLower.empty) {
+          console.warn('Document utilisateur non trouvé dans Firestore pour email:', userEmail);
+          console.warn('Création du document utilisateur...');
+          
+          // Créer le document avec l'UID comme ID
+          const userDocRef = doc(db, 'users', uid);
+          await setDoc(userDocRef, {
+            uid,
+            email: userEmail,
+            displayName: auth?.currentUser?.displayName || 'Utilisateur',
+            role: 'user',
+            tentatives: 0,
+            bloque: false,
+            createdAt: new Date().toISOString(),
+            fcmTokens: [token]
+          });
+          console.log('Document utilisateur créé avec token FCM:', uid);
+          return;
+        }
+        
+        // Utiliser le résultat en minuscules
+        const userDocRef = snapshotLower.docs[0].ref;
+        await updateDoc(userDocRef, {
+          fcmTokens: arrayUnion(token)
+        });
+        console.log('Token FCM ajouté pour utilisateur (lowercase):', userEmail);
+        return;
+      }
+
+      // Document trouvé, ajouter le token
+      const userDocRef = snapshot.docs[0].ref;
       await updateDoc(userDocRef, {
         fcmTokens: arrayUnion(token)
       });
       
-      console.log('Token FCM sauvegardé pour utilisateur:', uid);
+      console.log('Token FCM ajouté avec succès pour:', userEmail, 'Token:', token.substring(0, 20) + '...');
     } catch (error) {
       console.error('Erreur sauvegarde token FCM:', error);
     }
@@ -140,6 +202,7 @@ class FCMService {
 
   /**
    * Supprimer le token FCM d'un utilisateur dans Firestore
+   * Cherche le document par EMAIL
    */
   async removeTokenForUser(uid: string): Promise<void> {
     if (!db) {
@@ -153,15 +216,41 @@ class FCMService {
       return;
     }
 
+    // Récupérer l'email de l'utilisateur connecté
+    const userEmail = auth?.currentUser?.email;
+    if (!userEmail) {
+      console.warn('Email utilisateur non disponible pour supprimer le token');
+      return;
+    }
+
     try {
-      const userDocRef = doc(db, 'users', uid);
-      
-      // Supprimer le token de la liste
+      // Chercher le document utilisateur par email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', userEmail));
+      const snapshot = await getDocs(q);
+
+      if (snapshot.empty) {
+        // Essayer avec email en minuscules
+        const qLower = query(usersRef, where('email', '==', userEmail.toLowerCase()));
+        const snapshotLower = await getDocs(qLower);
+        
+        if (!snapshotLower.empty) {
+          const userDocRef = snapshotLower.docs[0].ref;
+          await updateDoc(userDocRef, {
+            fcmTokens: arrayRemove(token)
+          });
+          console.log('Token FCM supprimé pour utilisateur (lowercase):', userEmail);
+        }
+        return;
+      }
+
+      // Document trouvé, supprimer le token
+      const userDocRef = snapshot.docs[0].ref;
       await updateDoc(userDocRef, {
         fcmTokens: arrayRemove(token)
       });
       
-      console.log('Token FCM supprimé pour utilisateur:', uid);
+      console.log('Token FCM supprimé pour utilisateur:', userEmail);
     } catch (error) {
       console.error('Erreur suppression token FCM:', error);
     }
@@ -185,19 +274,28 @@ class FCMService {
       this.currentToken = token.value;
 
       // Si le token a changé, mettre à jour Firestore
-      if (oldToken && oldToken !== token.value && db) {
+      if (oldToken && oldToken !== token.value && db && auth?.currentUser?.email) {
         try {
-          const userDocRef = doc(db, 'users', uid);
+          const userEmail = auth.currentUser.email;
           
-          // Supprimer l'ancien token et ajouter le nouveau
-          await updateDoc(userDocRef, {
-            fcmTokens: arrayRemove(oldToken)
-          });
-          await updateDoc(userDocRef, {
-            fcmTokens: arrayUnion(token.value)
-          });
+          // Chercher le document utilisateur par email
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('email', '==', userEmail));
+          const snapshot = await getDocs(q);
           
-          console.log('Token FCM mis à jour pour utilisateur:', uid);
+          if (!snapshot.empty) {
+            const userDocRef = snapshot.docs[0].ref;
+            
+            // Supprimer l'ancien token et ajouter le nouveau
+            await updateDoc(userDocRef, {
+              fcmTokens: arrayRemove(oldToken)
+            });
+            await updateDoc(userDocRef, {
+              fcmTokens: arrayUnion(token.value)
+            });
+            
+            console.log('Token FCM mis à jour pour utilisateur:', userEmail);
+          }
         } catch (error) {
           console.error('Erreur mise à jour token FCM:', error);
         }

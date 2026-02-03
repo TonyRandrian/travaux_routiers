@@ -62,16 +62,24 @@ export const useAuthStore = defineStore('auth', () => {
       if (userDoc.exists()) {
         userProfile.value = userDoc.data() as User;
       } else {
-        // Profil cree via le web, on utilise les infos de Firebase Auth
-        userProfile.value = {
+        // Document utilisateur n'existe pas, le créer
+        const newUserProfile: User = {
           uid,
           email: currentUser.value?.email || '',
           displayName: currentUser.value?.displayName || 'Utilisateur',
           role: 'user',
           tentatives: 0,
           bloque: false,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          fcmTokens: [] // Liste vide au départ, les tokens seront ajoutés par FCM service
         };
+        
+        // Créer le document dans Firestore
+        const { setDoc } = await import('firebase/firestore');
+        await setDoc(userDocRef, newUserProfile);
+        console.log('Document utilisateur créé dans Firestore:', uid);
+        
+        userProfile.value = newUserProfile;
       }
     } catch (err) {
       console.error('Erreur fetchUserProfile:', err);

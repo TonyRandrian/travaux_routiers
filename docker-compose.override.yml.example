@@ -22,4 +22,7 @@
 services:
   tile-server:
     volumes:
-      - ${OSM_PBF_PATH}/region.osm.pbf:/data/region.osm.pbf:ro
+      # Remplacer complètement les volumes pour éviter les conflits
+      - C:/Users/gaylo/ITU/S5/Data/osm-travaux-routiers/region.osm.pbf:/data/region.osm.pbf:ro
+      - osm_data:/data/database
+      - osm_tiles:/data/tiles
