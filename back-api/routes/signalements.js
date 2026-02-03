@@ -112,7 +112,7 @@ router.get('/:id', async (req, res) => {
 // POST - Créer un nouveau signalement (utilisateurs connectés)
 router.post('/', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise, pourcentage_completion } = req.body;
+    const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise } = req.body;
     
     // Récupérer l'ID du statut "NOUVEAU"
     const statutResult = await pool.query(
@@ -120,11 +120,14 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
     );
     const id_statut = statutResult.rows[0]?.id || 1;
     
+    // Nouveau signalement = 0% d'avancement
+    const pourcentage_completion = 0;
+    
     const result = await pool.query(`
       INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, pourcentage_completion)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
-    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise, pourcentage_completion || 0]);
+    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise, pourcentage_completion]);
     
     // Ajouter l'historique du statut
     await pool.query(`
@@ -147,11 +150,26 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
 router.put('/:id', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
-    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion } = req.body;
+    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise } = req.body;
     
     // Récupérer le statut actuel
     const currentResult = await pool.query('SELECT id_statut_signalement FROM signalement WHERE id = $1', [id]);
     const currentStatut = currentResult.rows[0]?.id_statut_signalement;
+    
+    // Déterminer le pourcentage d'avancement selon le statut
+    let pourcentage_completion = null;
+    if (id_statut_signalement) {
+      const statutInfo = await pool.query('SELECT code FROM statut_signalement WHERE id = $1', [id_statut_signalement]);
+      const statutCode = statutInfo.rows[0]?.code;
+      
+      if (statutCode === 'NOUVEAU') {
+        pourcentage_completion = 0;
+      } else if (statutCode === 'EN_COURS') {
+        pourcentage_completion = 50;
+      } else if (statutCode === 'TERMINE') {
+        pourcentage_completion = 100;
+      }
+    }
     
     const result = await pool.query(`
       UPDATE signalement 
