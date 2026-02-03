@@ -61,7 +61,8 @@ function normalizeSignalement(doc: any): Signalement {
     utilisateur,
     entreprise,
     postgres_id: data.postgres_id,
-    synced_at: data.synced_at
+    synced_at: data.synced_at,
+    pourcentage_completion: data.pourcentage_completion || 0
   };
 }
 
@@ -200,7 +201,8 @@ export const useSignalementsStore = defineStore('signalements', () => {
           nom: entreprise.nom,
           contact: entreprise.contact
         } : null,
-        synced_at: null   // Pas encore synchronisé
+        synced_at: null,   // Pas encore synchronisé
+        pourcentage_completion: 0  // 0% au début
       };
 
       const docRef = await addDoc(signalementsRef, newSignalement);

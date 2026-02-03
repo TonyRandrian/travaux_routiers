@@ -22,6 +22,7 @@ router.get('/', async (req, res) => {
         s.date_signalement,
         s.id_statut_signalement,
         s.id_entreprise,
+        s.pourcentage_completion,
         ss.code as statut_code,
         ss.libelle as statut,
         e.nom as entreprise,
@@ -111,7 +112,7 @@ router.get('/:id', async (req, res) => {
 // POST - Créer un nouveau signalement (utilisateurs connectés)
 router.post('/', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise } = req.body;
+    const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise, pourcentage_completion } = req.body;
     
     // Récupérer l'ID du statut "NOUVEAU"
     const statutResult = await pool.query(
@@ -120,10 +121,10 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
     const id_statut = statutResult.rows[0]?.id || 1;
     
     const result = await pool.query(`
-      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, pourcentage_completion)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       RETURNING *
-    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise]);
+    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise, pourcentage_completion || 0]);
     
     // Ajouter l'historique du statut
     await pool.query(`
@@ -146,7 +147,7 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
 router.put('/:id', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
-    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise } = req.body;
+    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion } = req.body;
     
     // Récupérer le statut actuel
     const currentResult = await pool.query('SELECT id_statut_signalement FROM signalement WHERE id = $1', [id]);
@@ -159,10 +160,11 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
           surface_m2 = COALESCE($3, surface_m2),
           budget = COALESCE($4, budget),
           id_statut_signalement = COALESCE($5, id_statut_signalement),
-          id_entreprise = COALESCE($6, id_entreprise)
-      WHERE id = $7
+          id_entreprise = COALESCE($6, id_entreprise),
+          pourcentage_completion = COALESCE($7, pourcentage_completion)
+      WHERE id = $8
       RETURNING *
-    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, id]);
+    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion, id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Signalement non trouvé' });

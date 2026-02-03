@@ -100,9 +100,9 @@ class SyncService {
                 titre, description, latitude, longitude, 
                 surface_m2, budget, id_statut_signalement, 
                 id_utilisateur, id_entreprise, firebase_id, 
-                date_signalement, synced_at
+                date_signalement, pourcentage_completion, synced_at
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW())
               RETURNING id
             `, [
               pgData.titre,
@@ -115,7 +115,8 @@ class SyncService {
               pgData.id_utilisateur,
               pgData.id_entreprise,
               firestoreId,
-              pgData.date_signalement
+              pgData.date_signalement,
+              pgData.pourcentage_completion || 0
             ]);
 
             // Ajouter l'historique du statut
@@ -179,6 +180,7 @@ class SyncService {
           s.date_signalement,
           s.firebase_id,
           s.synced_at,
+          s.pourcentage_completion,
           ss.code as statut_code,
           ss.libelle as statut,
           e.nom as entreprise,
@@ -523,7 +525,8 @@ class SyncService {
       id_utilisateur: null, // Sera lié plus tard si nécessaire
       id_entreprise: firestoreData.entreprise ? (entreprises[firestoreData.entreprise] || null) : null,
       date_signalement: firestoreData.date_signalement || firestoreData.createdAt || new Date().toISOString(),
-      firebase_id: firestoreId
+      firebase_id: firestoreId,
+      pourcentage_completion: firestoreData.pourcentage_completion || 0
     };
   }
 
@@ -545,6 +548,7 @@ class SyncService {
       utilisateur_email: pgData.utilisateur_email || null,
       date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString() : new Date().toISOString(),
       pg_id: pgData.id,
+      pourcentage_completion: pgData.pourcentage_completion ? parseFloat(pgData.pourcentage_completion) : 0,
       updatedAt: new Date().toISOString(),
       syncedFromServer: true
     };

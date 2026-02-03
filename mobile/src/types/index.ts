@@ -49,6 +49,7 @@ export interface Signalement {
   entreprise: Entreprise | null;        // Objet imbriqué ou null
   postgres_id?: number;                 // ID dans PostgreSQL pour sync
   synced_at?: string | null;            // Timestamp de dernière sync
+  pourcentage_completion?: number;      // Pourcentage de complétion (0-100)
 }
 
 export interface Stats {
