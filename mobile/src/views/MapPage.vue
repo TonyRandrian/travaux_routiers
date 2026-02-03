@@ -107,8 +107,8 @@
     <!-- Bottom Sheet Modal -->
     <ion-modal 
       :is-open="showDetail" 
-      :initial-breakpoint="0.4"
-      :breakpoints="[0, 0.4, 0.75]"
+      :initial-breakpoint="0.5"
+      :breakpoints="[0, 0.5, 0.85]"
       @did-dismiss="closeDetail"
     >
       <div class="detail-sheet" v-if="selectedSignalement">
@@ -123,6 +123,21 @@
         </div>
 
         <p class="sheet-description">{{ selectedSignalement.description || 'Aucune description' }}</p>
+
+        <!-- Section Photos -->
+        <div v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0" class="sheet-photos">
+          <h4>📷 Photos ({{ selectedSignalement.photos.length }})</h4>
+          <div class="photos-scroll">
+            <div 
+              v-for="(photo, index) in selectedSignalement.photos" 
+              :key="photo.id || index"
+              class="photo-thumbnail"
+              @click="openPhotoViewer(index)"
+            >
+              <img :src="photo.url" :alt="'Photo ' + (index + 1)" loading="lazy" />
+            </div>
+          </div>
+        </div>
 
         <div class="sheet-stats">
           <div class="sheet-stat">
@@ -155,6 +170,44 @@
         </div>
       </div>
     </ion-modal>
+
+    <!-- Photo Viewer Modal -->
+    <ion-modal 
+      :is-open="showPhotoViewer" 
+      @did-dismiss="closePhotoViewer"
+      class="photo-viewer-modal"
+    >
+      <div class="photo-viewer" v-if="selectedSignalement?.photos">
+        <div class="photo-viewer-header">
+          <span>{{ currentPhotoIndex + 1 }} / {{ selectedSignalement.photos.length }}</span>
+          <ion-button fill="clear" @click="closePhotoViewer">
+            <ion-icon :icon="closeOutline"></ion-icon>
+          </ion-button>
+        </div>
+        <div class="photo-viewer-content">
+          <img 
+            :src="selectedSignalement.photos[currentPhotoIndex]?.url" 
+            :alt="'Photo ' + (currentPhotoIndex + 1)"
+          />
+        </div>
+        <div class="photo-viewer-nav" v-if="selectedSignalement.photos.length > 1">
+          <ion-button 
+            fill="clear" 
+            :disabled="currentPhotoIndex === 0"
+            @click="prevPhoto"
+          >
+            <ion-icon :icon="chevronBackOutline"></ion-icon>
+          </ion-button>
+          <ion-button 
+            fill="clear" 
+            :disabled="currentPhotoIndex >= selectedSignalement.photos.length - 1"
+            @click="nextPhoto"
+          >
+            <ion-icon :icon="chevronForwardOutline"></ion-icon>
+          </ion-button>
+        </div>
+      </div>
+    </ion-modal>
   </ion-page>
 </template>
 
@@ -178,7 +231,9 @@ import {
   walletOutline,
   businessOutline,
   personOutline,
-  peopleOutline
+  peopleOutline,
+  chevronBackOutline,
+  chevronForwardOutline
 } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/vue-leaflet';
@@ -201,6 +256,10 @@ const showDetail = ref(false);
 const showLegend = ref(false);
 const showOnlyMine = ref(false);
 const selectedSignalement = ref<Signalement | null>(null);
+
+// Photo viewer state
+const showPhotoViewer = ref(false);
+const currentPhotoIndex = ref(0);
 
 // Signalements filtrés selon le toggle
 const signalements = computed(() => {
@@ -250,6 +309,28 @@ function openSignalementDetail(signalement: Signalement) {
 function closeDetail() {
   showDetail.value = false;
   selectedSignalement.value = null;
+}
+
+// Photo viewer functions
+function openPhotoViewer(index: number) {
+  currentPhotoIndex.value = index;
+  showPhotoViewer.value = true;
+}
+
+function closePhotoViewer() {
+  showPhotoViewer.value = false;
+}
+
+function prevPhoto() {
+  if (currentPhotoIndex.value > 0) {
+    currentPhotoIndex.value--;
+  }
+}
+
+function nextPhoto() {
+  if (selectedSignalement.value?.photos && currentPhotoIndex.value < selectedSignalement.value.photos.length - 1) {
+    currentPhotoIndex.value++;
+  }
 }
 
 function goToNewSignalement() {
@@ -612,5 +693,113 @@ function formatCurrency(amount: number | null | undefined): string {
   font-size: 13px;
   font-weight: 600;
   color: white;
+}
+
+/* Photos Section */
+.sheet-photos {
+  margin-bottom: 20px;
+}
+
+.sheet-photos h4 {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.photos-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.photos-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+
+.photos-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 2px;
+}
+
+.photo-thumbnail {
+  flex-shrink: 0;
+  width: 100px;
+  height: 100px;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.2s ease;
+}
+
+.photo-thumbnail:hover {
+  border-color: #FFC107;
+  transform: scale(1.02);
+}
+
+.photo-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Photo Viewer Modal */
+.photo-viewer {
+  background: #000;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.photo-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+}
+
+.photo-viewer-header span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.photo-viewer-header ion-button {
+  --color: white;
+}
+
+.photo-viewer-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.photo-viewer-content img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.photo-viewer-nav {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.photo-viewer-nav ion-button {
+  --color: white;
+  font-size: 24px;
+}
+
+.photo-viewer-nav ion-button:disabled {
+  --color: rgba(255, 255, 255, 0.3);
 }
 </style>

@@ -124,6 +124,11 @@ class SyncService {
                 INSERT INTO signalement_statut (id_signalement, id_statut_signalement)
                 VALUES ($1, $2)
               `, [insertResult.rows[0].id, pgData.id_statut_signalement || statuts['NOUVEAU']]);
+
+              // Synchroniser les photos si présentes
+              if (pgData.photos && pgData.photos.length > 0) {
+                await this.syncPhotosFromFirestore(insertResult.rows[0].id, pgData.photos);
+              }
             }
 
             results.imported++;
@@ -131,7 +136,8 @@ class SyncService {
               action: 'imported',
               firebase_id: firestoreId,
               pg_id: insertResult.rows[0]?.id,
-              titre: pgData.titre
+              titre: pgData.titre,
+              photos_count: pgData.photos?.length || 0
             });
           }
         } catch (docError) {
@@ -512,6 +518,14 @@ class SyncService {
    * Mapper les données Firestore vers le format PostgreSQL
    */
   static mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises) {
+    // Supporter le nouveau format imbriqué pour le statut
+    let statutCode = 'NOUVEAU';
+    if (firestoreData.statut && typeof firestoreData.statut === 'object' && firestoreData.statut.code) {
+      statutCode = firestoreData.statut.code;
+    } else if (firestoreData.statut_code) {
+      statutCode = firestoreData.statut_code;
+    }
+
     return {
       titre: firestoreData.titre || firestoreData.title || 'Sans titre',
       description: firestoreData.description || '',
@@ -519,11 +533,12 @@ class SyncService {
       longitude: firestoreData.longitude || firestoreData.lng || 0,
       surface_m2: firestoreData.surface_m2 || firestoreData.surface || null,
       budget: firestoreData.budget || null,
-      id_statut_signalement: statuts[firestoreData.statut_code] || statuts['NOUVEAU'] || 1,
+      id_statut_signalement: statuts[statutCode] || statuts['NOUVEAU'] || 1,
       id_utilisateur: null, // Sera lié plus tard si nécessaire
-      id_entreprise: firestoreData.entreprise ? (entreprises[firestoreData.entreprise] || null) : null,
+      id_entreprise: firestoreData.entreprise ? (entreprises[firestoreData.entreprise.nom] || firestoreData.entreprise.id || null) : null,
       date_signalement: firestoreData.date_signalement || firestoreData.createdAt || new Date().toISOString(),
-      firebase_id: firestoreId
+      firebase_id: firestoreId,
+      photos: firestoreData.photos || [] // Photos du signalement
     };
   }
 
@@ -538,16 +553,89 @@ class SyncService {
       longitude: parseFloat(pgData.longitude) || 0,
       surface_m2: pgData.surface_m2 ? parseFloat(pgData.surface_m2) : null,
       budget: pgData.budget ? parseFloat(pgData.budget) : null,
-      statut_code: pgData.statut_code || 'NOUVEAU',
-      statut: pgData.statut || 'Nouveau',
-      entreprise: pgData.entreprise || null,
-      entreprise_contact: pgData.entreprise_contact || null,
-      utilisateur_email: pgData.utilisateur_email || null,
-      date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString() : new Date().toISOString(),
-      pg_id: pgData.id,
+      statut: {
+        id: pgData.id_statut || 1,
+        code: pgData.statut_code || 'NOUVEAU',
+        libelle: pgData.statut || 'Nouveau'
+      },
+      statut_code: pgData.statut_code || 'NOUVEAU', // Compatibilité ancien format
+      entreprise: pgData.entreprise ? {
+        id: pgData.id_entreprise,
+        nom: pgData.entreprise,
+        contact: pgData.entreprise_contact || null
+      } : null,
+      utilisateur: pgData.utilisateur_email ? {
+        id: pgData.id_utilisateur,
+        email: pgData.utilisateur_email,
+        nom: pgData.utilisateur_nom || '',
+        prenom: pgData.utilisateur_prenom || ''
+      } : null,
+      utilisateur_email: pgData.utilisateur_email || null, // Compatibilité
+      date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      photos: pgData.photos || [], // Photos synchronisées
+      postgres_id: pgData.id,
       updatedAt: new Date().toISOString(),
       syncedFromServer: true
     };
+  }
+
+  /**
+   * Synchroniser les photos d'un signalement depuis Firebase vers PostgreSQL
+   */
+  static async syncPhotosFromFirestore(signalementId, photos) {
+    if (!photos || photos.length === 0) return { synced: 0 };
+
+    const results = { synced: 0, errors: [] };
+
+    for (const photo of photos) {
+      try {
+        // Vérifier si la photo existe déjà
+        const existing = await pool.query(
+          'SELECT id FROM photo_signalement WHERE id_signalement = $1 AND url = $2',
+          [signalementId, photo.url]
+        );
+
+        if (existing.rows.length === 0) {
+          await pool.query(`
+            INSERT INTO photo_signalement (id_signalement, url, firebase_path, nom_fichier, taille_bytes, mime_type, ordre, synced_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          `, [
+            signalementId,
+            photo.url,
+            photo.firebase_path || null,
+            photo.nom_fichier || null,
+            photo.taille_bytes || null,
+            photo.mime_type || 'image/jpeg',
+            photo.ordre || 0
+          ]);
+          results.synced++;
+        }
+      } catch (err) {
+        results.errors.push({ photo: photo.url, error: err.message });
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * Récupérer les photos d'un signalement depuis PostgreSQL
+   */
+  static async getPhotosForSignalement(signalementId) {
+    const result = await pool.query(
+      'SELECT * FROM photo_signalement WHERE id_signalement = $1 ORDER BY ordre',
+      [signalementId]
+    );
+    return result.rows.map(row => ({
+      id: row.id.toString(),
+      url: row.url,
+      firebase_path: row.firebase_path,
+      nom_fichier: row.nom_fichier,
+      taille_bytes: row.taille_bytes,
+      mime_type: row.mime_type,
+      ordre: row.ordre,
+      created_at: row.created_at ? row.created_at.toISOString() : null
+    }));
   }
 
   /**

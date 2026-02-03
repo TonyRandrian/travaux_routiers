@@ -5,6 +5,9 @@ import { createPinia } from 'pinia';
 
 import { IonicVue } from '@ionic/vue';
 
+// PWA Elements pour la caméra sur le web
+import { defineCustomElements } from '@ionic/pwa-elements/loader';
+
 /* Core CSS required for Ionic components to work properly */
 import '@ionic/vue/css/core.css';
 
@@ -56,6 +59,9 @@ authStore.initAuthListener();
 // Charger les référentiels (statuts, entreprises) depuis Firebase
 const referentielsStore = useReferentielsStore(pinia);
 referentielsStore.loadAll();
+
+// Initialiser PWA Elements pour la caméra sur le web
+defineCustomElements(window);
 
 router.isReady().then(() => {
   app.mount('#app');
