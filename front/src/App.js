@@ -346,6 +346,46 @@ function LoginPage() {
     navigate('/access-denied', { replace: true });
   };
 
+  // Afficher un écran de chargement pendant la vérification de la session
+  // Cela évite que le formulaire de login apparaisse brièvement avant redirection
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Vérification de la session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si l'utilisateur est déjà connecté, ne pas afficher le formulaire de login
+  // (la redirection sera faite par le useEffect ci-dessus)
+  if (currentUser && userProfile) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Redirection en cours...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Login 
       onSwitchToRegister={() => navigate('/register')}
