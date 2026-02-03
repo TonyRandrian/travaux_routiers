@@ -1,0 +1,143 @@
+/* Thème Travaux Routiers - Antananarivo */
+/* Inspiré du design web existant */
+
+:root {
+  /* Couleurs primaires - Thème Travaux Routiers */
+  --ion-color-primary: #FFC107;
+  --ion-color-primary-rgb: 255, 193, 7;
+  --ion-color-primary-contrast: #1a1a2e;
+  --ion-color-primary-contrast-rgb: 26, 26, 46;
+  --ion-color-primary-shade: #e0aa06;
+  --ion-color-primary-tint: #ffc720;
+
+  --ion-color-secondary: #FF9800;
+  --ion-color-secondary-rgb: 255, 152, 0;
+  --ion-color-secondary-contrast: #1a1a2e;
+  --ion-color-secondary-contrast-rgb: 26, 26, 46;
+  --ion-color-secondary-shade: #e08600;
+  --ion-color-secondary-tint: #ffa21a;
+
+  --ion-color-tertiary: #1a1a2e;
+  --ion-color-tertiary-rgb: 26, 26, 46;
+  --ion-color-tertiary-contrast: #ffffff;
+  --ion-color-tertiary-contrast-rgb: 255, 255, 255;
+  --ion-color-tertiary-shade: #171728;
+  --ion-color-tertiary-tint: #313143;
+
+  --ion-color-success: #4CAF50;
+  --ion-color-success-rgb: 76, 175, 80;
+  --ion-color-success-contrast: #ffffff;
+  --ion-color-success-contrast-rgb: 255, 255, 255;
+  --ion-color-success-shade: #439a46;
+  --ion-color-success-tint: #5eb762;
+
+  --ion-color-warning: #FFC107;
+  --ion-color-warning-rgb: 255, 193, 7;
+  --ion-color-warning-contrast: #1a1a2e;
+  --ion-color-warning-contrast-rgb: 26, 26, 46;
+  --ion-color-warning-shade: #e0aa06;
+  --ion-color-warning-tint: #ffc720;
+
+  --ion-color-danger: #f44336;
+  --ion-color-danger-rgb: 244, 67, 54;
+  --ion-color-danger-contrast: #ffffff;
+  --ion-color-danger-contrast-rgb: 255, 255, 255;
+  --ion-color-danger-shade: #d73b30;
+  --ion-color-danger-tint: #f5564a;
+
+  --ion-color-dark: #1a1a2e;
+  --ion-color-dark-rgb: 26, 26, 46;
+  --ion-color-dark-contrast: #ffffff;
+  --ion-color-dark-contrast-rgb: 255, 255, 255;
+  --ion-color-dark-shade: #171728;
+  --ion-color-dark-tint: #313143;
+
+  --ion-color-medium: #666666;
+  --ion-color-medium-rgb: 102, 102, 102;
+  --ion-color-medium-contrast: #ffffff;
+  --ion-color-medium-contrast-rgb: 255, 255, 255;
+  --ion-color-medium-shade: #5a5a5a;
+  --ion-color-medium-tint: #757575;
+
+  --ion-color-light: #f5f5f5;
+  --ion-color-light-rgb: 245, 245, 245;
+  --ion-color-light-contrast: #1a1a2e;
+  --ion-color-light-contrast-rgb: 26, 26, 46;
+  --ion-color-light-shade: #d8d8d8;
+  --ion-color-light-tint: #f7f7f7;
+
+  /* Couleurs personnalisées */
+  --primary-yellow: #FFC107;
+  --primary-orange: #FF9800;
+  --dark-yellow: #FFA000;
+  --light-yellow: #FFD54F;
+  --warning-red: #f44336;
+  --dark-bg: #1a1a2e;
+  --darker-bg: #0f0f23;
+  --text-dark: #1a1a2e;
+  --text-light: #ffffff;
+
+  /* Statuts des signalements */
+  --status-nouveau: #f44336;
+  --status-en-cours: #FF9800;
+  --status-termine: #4CAF50;
+}
+
+/* iOS specific styles */
+.ios ion-toolbar {
+  --background: #1a1a2e;
+}
+
+/* Material Design specific styles */
+.md ion-toolbar {
+  --background: #1a1a2e;
+}
+
+/* Style global pour les FAB buttons */
+ion-fab-button {
+  --box-shadow: 0 4px 16px rgba(255, 152, 0, 0.4);
+}
+
+/* Style pour les items de liste */
+ion-item {
+  --transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Animation de chargement */
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* 🔧 Masquer la barre de défilement sur mobile tout en conservant le défilement */
+@media (pointer: coarse) {
+  html, body, ion-app, ion-content, .ion-page, #app {
+    /* Firefox */
+    scrollbar-width: none !important;
+    /* IE 10+ */
+    -ms-overflow-style: none !important;
+  }
+
+  html::-webkit-scrollbar, body::-webkit-scrollbar, ion-content::-webkit-scrollbar, .ion-page::-webkit-scrollbar, #app::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
+}
+
+/* Fallback global hide (au cas où) */
+html, body, ion-app, ion-content, .ion-page, #app {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+}
+
+html::-webkit-scrollbar, body::-webkit-scrollbar, ion-content::-webkit-scrollbar, .ion-page::-webkit-scrollbar, #app::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

@@ -1,0 +1,24 @@
+# Backend .gitignore
+
+# dependencies
+node_modules/
+
+# env
+.env
+.env.local
+
+# logs
+logs/
+*.log
+npm-debug.log*
+
+# testing
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

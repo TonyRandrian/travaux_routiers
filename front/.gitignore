@@ -1,0 +1,30 @@
+# Frontend (React) .gitignore
+
+# dependencies
+node_modules/
+
+# build output
+build/
+
+# env
+.env
+.env.local
+
+# misc
+npm-debug.log*
+.yarn-error.log
+
+# caches
+.cache/
+.parcel-cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# local test files
+coverage/

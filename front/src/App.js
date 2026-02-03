@@ -1,34 +1,459 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import './App.css';
+import MapComponent from './components/MapComponent';
+import Dashboard from './components/Dashboard/Dashboard';
+import ManagerPanel from './components/Manager/ManagerPanel';
+import config from './config/config';
+import { AuthProvider, useAuth, ROLES } from './contexts/AuthContext';
+import Login from './components/Auth/Login';
+import Register from './components/Auth/Register';
+import ForgotPassword from './components/Auth/ForgotPassword';
+import UserProfile from './components/Profile/UserProfile';
 
-function App() {
+// Protected Route Component (pour les utilisateurs connectés)
+// Seuls les VISITEURS et MANAGERS ont accès au web
+// Les USER (utilisateurs simples) doivent utiliser l'app mobile
+function ProtectedRoute({ children }) {
+  const { currentUser, isVisitor, userProfile, loading } = useAuth();
+  
+  // Attendre que le chargement soit terminé
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Chargement...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Si mode visiteur activé, autoriser
+  if (isVisitor) {
+    return children;
+  }
+  
+  // Si pas connecté, rediriger vers login
+  if (!currentUser && !userProfile) {
+    return <Navigate to="/" replace />;
+  }
+  
+  // Attendre que le profil soit chargé avant de vérifier le rôle
+  if (currentUser && !userProfile) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Chargement du profil...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Si connecté, vérifier le rôle
+  const role = userProfile?.role;
+  
+  // Seuls VISITEUR et MANAGER peuvent accéder au web
+  if (role === ROLES.USER) {
+    // Les utilisateurs simples sont redirigés vers une page d'accès refusé
+    return <Navigate to="/access-denied" replace />;
+  }
+  
+  return children;
+}
+
+// Page d'accès refusé pour les utilisateurs mobiles
+function AccessDeniedPage() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  
+  const handleLogout = async () => {
+    await logout();
+    navigate('/', { replace: true });
+  };
+  
+  return (
+    <div className="access-denied-container">
+      <div className="access-denied-card">
+        <div className="access-denied-icon">📱</div>
+        <h2>Accès réservé</h2>
+        <p>
+          Votre compte est de type <strong>Utilisateur</strong>.<br />
+          L'accès au site web est réservé aux <strong>Managers</strong> et aux <strong>Visiteurs</strong>.
+        </p>
+        <p className="mobile-hint">
+          Veuillez utiliser l'<strong>application mobile</strong> pour signaler et suivre les travaux routiers.
+        </p>
+        <div className="access-denied-actions">
+          <button className="back-btn" onClick={handleLogout}>
+            ← Retour à la connexion
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Main Application Component
+function MainApp() {
   const [message, setMessage] = useState('');
-  const [dbMessage, setDbMessage] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
+  const [showManagerPanel, setShowManagerPanel] = useState(false);
+  const [signalements, setSignalements] = useState([]);
+  const [stats, setStats] = useState({});
+  const [loadingStats, setLoadingStats] = useState(true);
+  const [statistiquesTraitement, setStatistiquesTraitement] = useState([]);
+  const [loadingTraitement, setLoadingTraitement] = useState(true);
+  const [viewMode, setViewMode] = useState('map'); // 'map' or 'dashboard'
+  const { userProfile, isVisitor, logout, exitVisitorMode } = useAuth();
+  const navigate = useNavigate();
+
+  // Charger les signalements depuis l'API
+  const fetchSignalements = async () => {
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/signalements`);
+      const data = await response.json();
+      // S'assurer que data est un tableau
+      if (Array.isArray(data)) {
+        setSignalements(data);
+      } else {
+        console.warn('API retour non-tableau, initialisation array vide');
+        setSignalements([]);
+      }
+    } catch (error) {
+      console.error('Erreur chargement signalements:', error);
+      setSignalements([]);
+    }
+  };
+
+  // Charger les statistiques
+  const fetchStats = async () => {
+    setLoadingStats(true);
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/stats`);
+      const data = await response.json();
+      setStats(data);
+    } catch (error) {
+      console.error('Erreur chargement stats:', error);
+    }
+    setLoadingStats(false);
+  };
+
+  // Charger les statistiques de traitement
+  const fetchStatistiquesTraitement = async () => {
+    setLoadingTraitement(true);
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/statistiques/traitement`);
+      const data = await response.json();
+      setStatistiquesTraitement(data);
+    } catch (error) {
+      console.error('Erreur chargement statistiques traitement:', error);
+      setStatistiquesTraitement([]);
+    }
+    setLoadingTraitement(false);
+  };
 
   useEffect(() => {
-    fetch('http://localhost:3000/')
-      .then(response => response.text())
-      .then(data => setMessage(data))
-      .catch(error => setMessage('Erreur de connexion'));
+    // Vérifier la connexion à l'API
+    fetch(`${config.api.baseUrl}/`)
+      .then(response => response.json())
+      .then(data => setMessage(data.message || 'Connecté'))
+      .catch(() => setMessage('API hors ligne'));
+
+    // Charger les données
+    fetchSignalements();
+    fetchStats();
+    fetchStatistiquesTraitement();
   }, []);
 
-  const testDB = () => {
-    fetch('http://localhost:3000/db')
-      .then(response => response.json())
-      .then(data => setDbMessage(JSON.stringify(data)))
-      .catch(error => setDbMessage('Erreur DB'));
+  // Rafraîchir les données quand le manager panel se ferme
+  const handleManagerClose = () => {
+    setShowManagerPanel(false);
+    fetchSignalements();
+    fetchStats();
+    fetchStatistiquesTraitement();
+  };
+
+  // Vérifier si l'utilisateur est manager
+  const isManager = userProfile?.role === ROLES.MANAGER;
+  
+  // Vérifier si l'utilisateur est un visiteur
+  const isVisitorMode = isVisitor || userProfile?.role === ROLES.VISITEUR || userProfile?.isVisitor;
+
+  // Gérer la déconnexion ou sortie mode visiteur
+  const handleLogoutOrExit = async () => {
+    if (isVisitorMode) {
+      exitVisitorMode();
+    } else {
+      await logout();
+    }
+    navigate('/', { replace: true });
   };
 
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Travaux Routiers Front</h1>
-        <p>Welcome to the front-end!</p>
-        <p>Message du back: {message}</p>
-        <button onClick={testDB}>Tester DB</button>
-        <p>{dbMessage}</p>
+        <div className="header-top">
+          <div className="header-brand">
+            <span className="brand-icon">🚧</span>
+            <h1>Travaux Routiers</h1>
+          </div>
+          <div className="header-actions">
+            {isManager && (
+              <button 
+                className="manager-btn"
+                onClick={() => setShowManagerPanel(true)}
+              >
+                🔧 Panel Manager
+              </button>
+            )}
+            {isVisitorMode ? (
+              <button className="visitor-btn" onClick={handleLogoutOrExit}>
+                <span className="visitor-icon">👁️</span>
+                <span>Mode Visiteur</span>
+                <span className="exit-hint">Se connecter</span>
+              </button>
+            ) : (
+              <button className="user-button" onClick={() => setShowProfile(true)}>
+                <span className="user-avatar">
+                  {userProfile?.displayName?.charAt(0)?.toUpperCase() || 'U'}
+                </span>
+                <span className="user-name">{userProfile?.displayName || 'Utilisateur'}</span>
+                {isManager && <span className="role-badge manager">Manager</span>}
+                {userProfile?.role === ROLES.USER && <span className="role-badge user">Utilisateur</span>}
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="header-info">
+          <div className="info-item">
+            <span className="label">Statut API:</span>
+            <span className="value">{message || 'Chargement...'}</span>
+          </div>
+          <div className="view-toggle">
+            <button 
+              className={`toggle-btn ${viewMode === 'map' ? 'active' : ''}`}
+              onClick={() => setViewMode('map')}
+            >
+              🗺️ Carte
+            </button>
+            <button 
+              className={`toggle-btn ${viewMode === 'dashboard' ? 'active' : ''}`}
+              onClick={() => setViewMode('dashboard')}
+            >
+              📊 Récapitulatif
+            </button>
+          </div>
+          {/* Bouton Synchroniser visible uniquement pour le Manager */}
+          {isManager && (
+            <button className="refresh-btn" onClick={() => { 
+              fetchSignalements(); 
+              fetchStats(); 
+              fetchStatistiquesTraitement();
+            }}>
+              🔄 Synchroniser
+            </button>
+          )}
+        </div>
       </header>
+      
+      <main className="main-content">
+        {viewMode === 'map' ? (
+          <div className="map-section">
+            <div className="map-header">
+              <h2>🗺️ Carte des travaux routiers - Antananarivo</h2>
+              <p className="map-info">
+                Centre: 18.8792°S, 47.5079°E | {signalements.length} signalement(s)
+              </p>
+            </div>
+            <MapComponent 
+              signalements={signalements}
+              center={[config.map.center.lat, config.map.center.lng]}
+              zoom={config.map.zoom}
+            />
+          </div>
+        ) : (
+          <Dashboard 
+            stats={stats} 
+            loading={loadingStats}
+            statistiquesTraitement={statistiquesTraitement}
+            loadingTraitement={loadingTraitement}
+          />
+        )}
+      </main>
+
+      {showProfile && !isVisitorMode && (
+        <UserProfile onClose={() => setShowProfile(false)} />
+      )}
+
+      {showManagerPanel && isManager && (
+        <ManagerPanel onClose={handleManagerClose} />
+      )}
     </div>
+  );
+}
+
+// Auth Pages with redirect
+function LoginPage() {
+  const navigate = useNavigate();
+  const { currentUser, userProfile, isVisitor, loading } = useAuth();
+
+  // Rediriger l'utilisateur déjà connecté vers la bonne page selon son rôle
+  // Attendre que le loading soit terminé ET que le profil soit chargé
+  useEffect(() => {
+    if (loading) return; // Attendre la fin du chargement
+    
+    if (isVisitor) {
+      navigate('/app', { replace: true });
+      return;
+    }
+    
+    // Si connecté ET profil chargé, rediriger selon le rôle
+    if (currentUser && userProfile) {
+      const role = userProfile.role;
+      if (role === ROLES.USER) {
+        navigate('/access-denied', { replace: true });
+      } else {
+        navigate('/app', { replace: true });
+      }
+    }
+  }, [currentUser, userProfile, isVisitor, loading, navigate]);
+
+  const handleLoginSuccess = () => {
+    navigate('/app', { replace: true });
+  };
+
+  const handleVisitorMode = () => {
+    navigate('/app', { replace: true });
+  };
+
+  const handleAccessDenied = () => {
+    navigate('/access-denied', { replace: true });
+  };
+
+  // Afficher un écran de chargement pendant la vérification de la session
+  // Cela évite que le formulaire de login apparaisse brièvement avant redirection
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Vérification de la session...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Si l'utilisateur est déjà connecté, ne pas afficher le formulaire de login
+  // (la redirection sera faite par le useEffect ci-dessus)
+  if (currentUser && userProfile) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        backgroundColor: '#1a1a2e',
+        color: '#fff'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
+          <p>Redirection en cours...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Login 
+      onSwitchToRegister={() => navigate('/register')}
+      onForgotPassword={() => navigate('/forgot-password')}
+      onLoginSuccess={handleLoginSuccess}
+      onVisitorMode={handleVisitorMode}
+      onAccessDenied={handleAccessDenied}
+    />
+  );
+}
+
+function RegisterPage() {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/app', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
+  return (
+    <Register onSwitchToLogin={() => navigate('/')} />
+  );
+}
+
+function ForgotPasswordPage() {
+  const navigate = useNavigate();
+  const { currentUser } = useAuth();
+
+  useEffect(() => {
+    if (currentUser) {
+      navigate('/app', { replace: true });
+    }
+  }, [currentUser, navigate]);
+
+  return (
+    <ForgotPassword onBackToLogin={() => navigate('/')} />
+  );
+}
+
+function AppContent() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/access-denied" element={<AccessDeniedPage />} />
+        <Route 
+          path="/app" 
+          element={
+            <ProtectedRoute>
+              <MainApp />
+            </ProtectedRoute>
+          } 
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Router>
+  );
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
   );
 }
 

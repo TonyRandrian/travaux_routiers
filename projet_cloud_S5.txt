@@ -1,0 +1,77 @@
+
+Contraintes :
+  - API uniquement (pas d’interface graphique)
+
+====================
+Module Authentification
+====================
+Connexion :
+- Utilisation de Firebase s’il y a une connexion Internet
+- Utilisation d’une base locale PostgreSQL dans Docker en cas d’absence de connexion
+
+Fonctionnalités minimales :
+- Authentification (email / mot de passe)
+- Inscription
+- Modification des informations utilisateur
+- Gestion de la durée de vie des sessions
+- Limitation du nombre de tentatives de connexion (paramétrable, par défaut : 3)
+
+Sécurité :
+- Une API REST permet de réinitialiser le blocage d’un utilisateur
+
+Documentation :
+- Documentation de l’API via Swagger
+
+====================
+Module Cartes
+====================
+- Installer un serveur de cartes offline sur Docker
+- Télécharger la carte de la ville d’Antananarivo avec les rues
+- Utiliser Leaflet pour afficher et manipuler la carte dans l’application web
+
+====================
+Module Web
+====================
+Description :
+Application permettant de signaler et de suivre les travaux routiers dans la ville d’Antananarivo
+
+Authentification :
+- Utilisation de l’API REST d’authentification pour se connecter et créer un compte
+
+Profils utilisateurs :
+- Visiteur (sans compte)
+- Utilisateur (avec création de compte)
+- Manager (compte créé par défaut)
+
+Fonctionnalités Visiteur :
+- Visualiser la carte avec les points représentant les problèmes routiers
+- Affichage des informations au survol d’un point :
+  * Date
+  * Statut (nouveau, en cours, terminé)
+  * Surface en m²
+  * Budget
+  * Entreprise concernée
+- Tableau de récapitulation :
+  * Nombre total de points
+  * Surface totale
+  * Avancement en pourcentage
+  * Budget total
+
+Fonctionnalités Manager :
+- Bouton de synchronisation
+- Récupération des signalements en ligne (Firebase)
+- Envoi des données nécessaires en ligne (Firebase) pour affichage mobile
+- Page de déblocage des utilisateurs bloqués
+- Gestion des informations des signalements (surface, budget, entreprise, etc.)
+- Modification du statut des signalements
+
+====================
+Module Mobile
+====================
+Utilisateurs :
+- Connexion via Firebase (en ligne)
+- Signalement des problèmes routiers depuis la carte
+  * Utilisation de Leaflet et OpenStreetMap en ligne
+  * Localisation activée
+- Affichage de la carte et du récapitulatif (identique aux visiteurs web)
+- Filtre : afficher uniquement mes signalements

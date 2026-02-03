@@ -1,0 +1,265 @@
+const express = require('express');
+const router = express.Router();
+const SyncService = require('../services/syncService');
+const { authenticateToken, requireManager } = require('../middleware/auth');
+
+/**
+ * @swagger
+ * tags:
+ *   name: Synchronisation
+ *   description: API de synchronisation Firestore <-> PostgreSQL
+ */
+
+/**
+ * @swagger
+ * /api/sync/status:
+ *   get:
+ *     summary: Vérifier le statut de la synchronisation
+ *     tags: [Synchronisation]
+ *     responses:
+ *       200:
+ *         description: Statut de la synchronisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 available:
+ *                   type: boolean
+ *                 lastSync:
+ *                   type: object
+ */
+router.get('/status', async (req, res) => {
+  try {
+    const status = await SyncService.getLastSyncStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sync/from-firestore:
+ *   post:
+ *     summary: Synchroniser depuis Firestore vers PostgreSQL (Manager uniquement)
+ *     description: Récupère les nouveaux signalements créés depuis l'application mobile
+ *     tags: [Synchronisation]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Résultat de la synchronisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 imported:
+ *                   type: integer
+ *                 updated:
+ *                   type: integer
+ *                 errors:
+ *                   type: array
+ *       401:
+ *         description: Non authentifié
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       503:
+ *         description: Firebase non configuré
+ */
+router.post('/from-firestore', authenticateToken, requireManager, async (req, res) => {
+  try {
+    if (!SyncService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Firebase non configuré',
+        message: 'Veuillez configurer les credentials Firebase dans les variables d\'environnement'
+      });
+    }
+
+    // Importer les signalements depuis Firebase
+    const signalementResults = await SyncService.syncFromFirestore();
+    
+    // Importer aussi les utilisateurs depuis Firebase
+    const userResults = await SyncService.importUsersFromFirestore();
+    
+    res.json({
+      success: true,
+      message: `Import depuis Firebase terminé`,
+      results: {
+        signalements: signalementResults,
+        users: userResults,
+        imported: (signalementResults.imported || 0) + (userResults.imported || 0),
+        updated: (signalementResults.updated || 0) + (userResults.updated || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Erreur sync from Firestore:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sync/to-firestore:
+ *   post:
+ *     summary: Synchroniser depuis PostgreSQL vers Firestore (Manager uniquement)
+ *     description: Envoie les mises à jour vers Firebase pour l'application mobile
+ *     tags: [Synchronisation]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Résultat de la synchronisation
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 exported:
+ *                   type: integer
+ *                 updated:
+ *                   type: integer
+ *                 errors:
+ *                   type: array
+ *       401:
+ *         description: Non authentifié
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       503:
+ *         description: Firebase non configuré
+ */
+router.post('/to-firestore', authenticateToken, requireManager, async (req, res) => {
+  try {
+    if (!SyncService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Firebase non configuré',
+        message: 'Veuillez configurer les credentials Firebase dans les variables d\'environnement'
+      });
+    }
+
+    // Exporter les signalements vers Firebase (PostgreSQL → Firebase)
+    const signalementResults = await SyncService.syncToFirestore();
+    
+    // Exporter aussi les utilisateurs vers Firebase (PostgreSQL → Firebase)
+    const userResults = await SyncService.exportUsersToFirestore();
+    
+    res.json({
+      success: true,
+      message: `Export vers Firebase terminé`,
+      results: {
+        signalements: signalementResults,
+        users: userResults,
+        exported: (signalementResults.exported || 0) + (userResults.exported || 0),
+        updated: (signalementResults.updated || 0) + (userResults.updated || 0)
+      }
+    });
+  } catch (error) {
+    console.error('Erreur sync to Firestore:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sync/all:
+ *   post:
+ *     summary: Synchronisation bidirectionnelle complète (Manager uniquement)
+ *     description: |
+ *       Effectue une synchronisation bidirectionnelle :
+ *       1. Récupère les nouveaux signalements depuis Firestore (mobile)
+ *       2. Envoie les mises à jour vers Firestore (pour le mobile)
+ *     tags: [Synchronisation]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Résultat de la synchronisation complète
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 fromFirestore:
+ *                   type: object
+ *                 toFirestore:
+ *                   type: object
+ *                 timestamp:
+ *                   type: string
+ *       401:
+ *         description: Non authentifié
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       503:
+ *         description: Firebase non configuré
+ */
+router.post('/all', authenticateToken, requireManager, async (req, res) => {
+  try {
+    if (!SyncService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Firebase non configuré',
+        message: 'Veuillez configurer les credentials Firebase dans les variables d\'environnement'
+      });
+    }
+
+    const results = await SyncService.syncAll();
+    
+    const totalImported = results.fromFirestore?.imported || 0;
+    const totalExported = results.toFirestore?.exported || 0;
+    const totalUpdated = (results.fromFirestore?.updated || 0) + (results.toFirestore?.updated || 0);
+    const usersImported = results.users?.imported || 0;
+    const usersExported = results.users?.exported || 0;
+
+    res.json({
+      success: true,
+      message: `Synchronisation complète terminée: ${totalImported} importés, ${totalExported} exportés, ${totalUpdated} mis à jour, ${usersImported + usersExported} utilisateurs synchronisés`,
+      results
+    });
+  } catch (error) {
+    console.error('Erreur sync all:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/sync/users:
+ *   post:
+ *     summary: Synchroniser les utilisateurs entre Firebase et PostgreSQL (Manager uniquement)
+ *     tags: [Synchronisation]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Résultat de la synchronisation des utilisateurs
+ *       401:
+ *         description: Non authentifié
+ *       403:
+ *         description: Accès refusé (Manager requis)
+ *       503:
+ *         description: Firebase non configuré
+ */
+router.post('/users', authenticateToken, requireManager, async (req, res) => {
+  try {
+    if (!SyncService.isAvailable()) {
+      return res.status(503).json({ 
+        error: 'Firebase non configuré',
+        message: 'Veuillez configurer les credentials Firebase dans les variables d\'environnement'
+      });
+    }
+
+    const results = await SyncService.syncUsers();
+    res.json({
+      success: true,
+      message: `Synchronisation utilisateurs terminée: ${results.imported} importés, ${results.exported} exportés`,
+      results
+    });
+  } catch (error) {
+    console.error('Erreur sync users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+module.exports = router;

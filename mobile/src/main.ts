@@ -1,0 +1,68 @@
+import { createApp } from 'vue'
+import App from './App.vue'
+import router from './router';
+import { createPinia } from 'pinia';
+
+import { IonicVue } from '@ionic/vue';
+
+// PWA Elements pour la caméra sur le web
+import { defineCustomElements } from '@ionic/pwa-elements/loader';
+
+/* Core CSS required for Ionic components to work properly */
+import '@ionic/vue/css/core.css';
+
+/* Basic CSS for apps built with Ionic */
+import '@ionic/vue/css/normalize.css';
+import '@ionic/vue/css/structure.css';
+import '@ionic/vue/css/typography.css';
+
+/* Optional CSS utils that can be commented out */
+import '@ionic/vue/css/padding.css';
+import '@ionic/vue/css/float-elements.css';
+import '@ionic/vue/css/text-alignment.css';
+import '@ionic/vue/css/text-transformation.css';
+import '@ionic/vue/css/flex-utils.css';
+import '@ionic/vue/css/display.css';
+
+/**
+ * Ionic Dark Mode
+ * -----------------------------------------------------
+ * For more info, please see:
+ * https://ionicframework.com/docs/theming/dark-mode
+ */
+
+/* Désactivé - on gère notre propre thème */
+/* @import '@ionic/vue/css/palettes/dark.always.css'; */
+/* @import '@ionic/vue/css/palettes/dark.class.css'; */
+/* import '@ionic/vue/css/palettes/dark.system.css'; */
+
+/* Theme variables */
+import './theme/variables.css';
+
+/* Leaflet CSS */
+import 'leaflet/dist/leaflet.css';
+
+import { useAuthStore } from './stores/auth';
+import { useReferentielsStore } from './stores/referentiels';
+
+const pinia = createPinia();
+
+const app = createApp(App)
+  .use(IonicVue)
+  .use(pinia)
+  .use(router);
+
+// Initialiser l'écouteur d'authentification Firebase
+const authStore = useAuthStore(pinia);
+authStore.initAuthListener();
+
+// Charger les référentiels (statuts, entreprises) depuis Firebase
+const referentielsStore = useReferentielsStore(pinia);
+referentielsStore.loadAll();
+
+// Initialiser PWA Elements pour la caméra sur le web
+defineCustomElements(window);
+
+router.isReady().then(() => {
+  app.mount('#app');
+});

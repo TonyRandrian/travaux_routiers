@@ -1,0 +1,25 @@
+# docker-compose.override.yml
+# INSTRUCTIONS :
+# 1. Créez un dossier SANS ESPACES dans le chemin, par exemple :
+#    - C:\OSM_Data\
+#    - D:\maps\
+#    - /mnt/data/osm/
+#
+# 2. Placez votre fichier region.osm.pbf dans ce dossier
+#
+# 3. Copiez ce fichier en "docker-compose.override.yml" (supprimez le .example)
+#
+# 4. Modifiez la variable OSM_PBF_PATH ci-dessous avec le chemin vers votre dossier
+#    (IMPORTANT : utiliser / au lieu de \ et PAS D'ESPACES dans le chemin)
+#
+# Exemples :
+#   Windows  : OSM_PBF_PATH=C:/OSM_Data
+#   Windows  : OSM_PBF_PATH=D:/maps
+#   Linux    : OSM_PBF_PATH=/mnt/data/osm
+#
+# 5. Lancez : docker-compose up --build
+
+services:
+  tile-server:
+    volumes:
+      - ${OSM_PBF_PATH}/region.osm.pbf:/data/region.osm.pbf:ro

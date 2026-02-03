@@ -2,34 +2,86 @@ services:
   db:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: travaux_routiers
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${DB_NAME:-travaux_routiers}
+      POSTGRES_USER: ${DB_USER:-user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     ports:
-      - "5432:5432"
+      - "${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Scripts SQL exécutés automatiquement lors de l'initialisation de la base
+      - ./back-api/database/init.sql:/docker-entrypoint-initdb.d/00-init.sql
+      - ./back-api/database/combined_script.sql:/docker-entrypoint-initdb.d/combined_script.sql
+      - ./back-api/database/add_pourcentage_to_signalement.sql:/docker-entrypoint-initdb.d/add_pourcentage_to_signalement.sql
+      - ./back-api/database/migration_sync.sql:/docker-entrypoint-initdb.d/migration_sync.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-travaux_routiers}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   back-api:
     build: ./back-api
     ports:
-      - "3000:3000"
+      - "${BACKEND_PORT:-3001}:3000"
+    # Charger les variables depuis le fichier back-api/.env
+    env_file:
+      - ./back-api/.env
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=${NODE_ENV:-development}
       - DB_HOST=db
       - DB_PORT=5432
-      - DB_NAME=travaux_routiers
-      - DB_USER=user
-      - DB_PASSWORD=password
+      - DB_NAME=${DB_NAME:-travaux_routiers}
+      - DB_USER=${DB_USER:-user}
+      - DB_PASSWORD=${DB_PASSWORD:-password}
+      # Auth / Sessions (peuvent être redéfinies dans back-api/.env ou via variables d'environnement du projet)
+      - SESSION_DURATION=${SESSION_DURATION:-3600}
+      - REFRESH_TOKEN_DURATION=${REFRESH_TOKEN_DURATION:-604800}
+      - JWT_SECRET=${JWT_SECRET:-changez_moi_en_valeur_secrete}
+      - MAX_LOGIN_ATTEMPTS=${MAX_LOGIN_ATTEMPTS:-3}
+    volumes:
+      - ./back-api:/app
+      - /app/node_modules
     depends_on:
-      - db
+      db:
+        condition: service_healthy
 
   front:
     build: ./front
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-3000}:3000"
+    env_file:
+      - ./front/.env
+    environment:
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+      - REACT_APP_API_URL=http://localhost:${BACKEND_PORT:-3001}
+      - REACT_APP_TILE_SERVER_URL=http://localhost:${TILE_SERVER_PORT:-8080}/tile/{z}/{x}/{y}.png
+      - REACT_APP_MAP_CENTER_LAT=${MAP_CENTER_LAT:--18.8792}
+      - REACT_APP_MAP_CENTER_LNG=${MAP_CENTER_LNG:-47.5079}
+      - REACT_APP_MAP_ZOOM=${MAP_ZOOM:-13}
+    volumes:
+      - ./front:/app
+      - /app/node_modules
     depends_on:
       - back-api
 
+  tile-server:
+    image: overv/openstreetmap-tile-server:2.3.0
+    command: run
+    ports:
+      - "${TILE_SERVER_PORT:-8080}:80"
+    volumes:
+      - ./osm/region.osm.pbf:/data/region.osm.pbf
+      - osm_data:/data/database
+      - osm_tiles:/data/tiles
+    environment:
+      - THREADS=4
+      - OSM2PGSQL_EXTRA_ARGS=-C 512
+      - PBF_PATH=/data/region.osm.pbf
+    shm_size: 512m
+
 volumes:
   postgres_data:
+  osm_data:
+  osm_tiles:

@@ -1,3 +1,79 @@
+osm/region.osm.pbf
+# Root .gitignore for the Travaux Routiers project
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+front/.env
+front/.env.local
+front/.env.development.local
+front/.env.test.local
+front/.env.production.local
+
+# Node
+node_modules/
+**/node_modules/
+
+# Build outputs
+build/
+dist/
+coverage/
+coverage-final.json
+
+# React
+/front/build/
+/front/node_modules/
+/front/.cache/
+
+# Backend
+/back-api/node_modules/
+/osm/region.osm.pbf
+
+# Env files
+.env
+.env.local
+.env.*.local
+# Firebase Admin service account (do not commit)
+back-api/config/firebase-service-account.json
+# Also ignore any service account jsons in config folders
+**/config/firebase-service-account.json
+
+# Docker and data volumes
+docker-compose.override.yml
+docker-compose.*.yml.local
+*.pem
+*.key
+/osm_data/
+/osm_tiles/
+/postgres_data/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Misc
+*.tgz
+*.zip
+*.bak
+.certificate
+commande.txt
 ./back-api/node_modules
 ./font/note_modules
 ./osm/*
