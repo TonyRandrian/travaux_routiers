@@ -103,6 +103,56 @@ export function usePhotoUpload() {
   }
 
   /**
+   * Compresse une image pour réduire sa taille
+   */
+  async function compressImage(blob: Blob, maxWidth: number = 800, quality: number = 0.7): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        // Calculer les nouvelles dimensions
+        let width = img.width;
+        let height = img.height;
+        
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width;
+          width = maxWidth;
+        }
+
+        // Créer le canvas
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Impossible de créer le contexte canvas'));
+          return;
+        }
+
+        // Dessiner l'image redimensionnée
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convertir en blob compressé
+        canvas.toBlob(
+          (compressedBlob) => {
+            if (compressedBlob) {
+              console.log(`Image compressée: ${blob.size} -> ${compressedBlob.size} bytes`);
+              resolve(compressedBlob);
+            } else {
+              reject(new Error('Échec de la compression'));
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+      
+      img.onerror = () => reject(new Error('Erreur de chargement de l\'image'));
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
+  /**
    * Upload une photo vers Firebase Storage
    */
   async function uploadPhoto(
@@ -127,14 +177,18 @@ export function usePhotoUpload() {
     try {
       // Récupérer le blob depuis webPath
       const response = await fetch(photo.webPath);
-      const blob = await response.blob();
+      const originalBlob = await response.blob();
       
-      uploadProgress.value = 30;
+      uploadProgress.value = 20;
+
+      // Compresser l'image (max 800px, qualité 70%)
+      const blob = await compressImage(originalBlob, 800, 0.7);
+      
+      uploadProgress.value = 40;
 
       // Générer un nom de fichier unique
       const timestamp = Date.now();
-      const extension = photo.format || 'jpeg';
-      const fileName = `photo_${timestamp}_${ordre}.${extension}`;
+      const fileName = `photo_${timestamp}_${ordre}.jpg`;
       const firebasePath = `signalements/${signalementId}/${fileName}`;
 
       // Créer la référence Firebase Storage
@@ -142,9 +196,9 @@ export function usePhotoUpload() {
 
       uploadProgress.value = 50;
 
-      // Upload le blob
+      // Upload le blob compressé
       await uploadBytes(photoRef, blob, {
-        contentType: `image/${extension}`
+        contentType: 'image/jpeg'
       });
 
       uploadProgress.value = 80;
@@ -161,7 +215,7 @@ export function usePhotoUpload() {
         firebase_path: firebasePath,
         nom_fichier: fileName,
         taille_bytes: blob.size,
-        mime_type: `image/${extension}`,
+        mime_type: 'image/jpeg',
         ordre: ordre
       };
     } catch (err: any) {

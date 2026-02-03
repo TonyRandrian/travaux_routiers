@@ -390,9 +390,11 @@ async function handleSubmit() {
     setTimeout(() => {
       router.push('/home');
     }, 1500);
-  } catch (err) {
+  } catch (err: any) {
     console.error('Erreur création signalement:', err);
-    error.value = 'Erreur lors de la création du signalement';
+    // Afficher le message d'erreur détaillé
+    const errorMessage = err?.message || err?.code || String(err);
+    error.value = 'Erreur lors de la création: ' + errorMessage;
   } finally {
     loading.value = false;
   }

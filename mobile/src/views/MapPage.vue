@@ -125,17 +125,39 @@
         <p class="sheet-description">{{ selectedSignalement.description || 'Aucune description' }}</p>
 
         <!-- Section Photos -->
-        <div v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0" class="sheet-photos">
-          <h4>📷 Photos ({{ selectedSignalement.photos.length }})</h4>
+        <div class="sheet-photos">
+          <h4>📷 Photos ({{ selectedSignalement.photos?.length || 2 }})</h4>
           <div class="photos-scroll">
-            <div 
-              v-for="(photo, index) in selectedSignalement.photos" 
-              :key="photo.id || index"
-              class="photo-thumbnail"
-              @click="openPhotoViewer(index)"
-            >
-              <img :src="photo.url" :alt="'Photo ' + (index + 1)" loading="lazy" />
-            </div>
+            <!-- Photos du signalement -->
+            <template v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0">
+              <div 
+                v-for="(photo, index) in selectedSignalement.photos" 
+                :key="photo.id || index"
+                class="photo-thumbnail"
+                @click="openPhotoViewer(index)"
+              >
+                <img :src="photo.url" :alt="'Photo ' + (index + 1)" loading="lazy" />
+              </div>
+            </template>
+            <!-- Photos par défaut si pas de photos -->
+            <template v-else>
+              <div class="photo-thumbnail default-photo">
+                <img 
+                  src="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=400&q=80" 
+                  alt="Photo par défaut - Route"
+                  loading="lazy"
+                />
+                <span class="default-badge">Par défaut</span>
+              </div>
+              <div class="photo-thumbnail default-photo">
+                <img 
+                  src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&q=80" 
+                  alt="Photo par défaut - Travaux"
+                  loading="lazy"
+                />
+                <span class="default-badge">Par défaut</span>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -743,6 +765,25 @@ function formatCurrency(amount: number | null | undefined): string {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.photo-thumbnail.default-photo {
+  position: relative;
+  width: 150px;
+  opacity: 0.8;
+}
+
+.default-badge {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.7);
+  color: #aaa;
+  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
 }
 
 /* Photo Viewer Modal */
