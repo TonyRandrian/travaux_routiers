@@ -102,19 +102,6 @@
       <div v-if="isAuthenticated" class="add-btn" @click="goToNewSignalement">
         <ion-icon :icon="addOutline"></ion-icon>
       </div>
-
-      <!-- Demo Button pour afficher notification -->
-      <div class="demo-btn" @click="showTestNotification">
-        <ion-icon :icon="notificationsOutline"></ion-icon>
-      </div>
-
-      <!-- Notification Overlay -->
-      <NotificationOverlay 
-        :notification="currentNotification"
-        :is-visible="showNotification"
-        @close="closeNotification"
-        @viewOnMap="focusOnLocation"
-      />
     </ion-content>
 
     <!-- Bottom Sheet Modal -->
@@ -191,17 +178,15 @@ import {
   walletOutline,
   businessOutline,
   personOutline,
-  peopleOutline,
-  notificationsOutline
+  peopleOutline
 } from 'ionicons/icons';
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
-import NotificationOverlay from '@/components/NotificationOverlay.vue';
 import { useReferentielsStore } from '@/stores/referentiels';
-import type { Signalement } from '@/types';
+import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
 const signalementsStore = useSignalementsStore();
@@ -234,76 +219,8 @@ const signalements = computed(() => {
 });
 const isAuthenticated = computed(() => authStore.isAuthenticated);
 
-// Variables pour les notifications de test
-const showNotification = ref(false);
-const currentNotification = ref({
-  title: 'Mise à jour de votre signalement',
-  body: 'Votre signalement "Nid de poule Avenue de l\'Indépendance" est maintenant en cours de traitement. Entreprise en charge : COLAS Madagascar',
-  timestamp: new Date().toISOString(),
-  signalementData: {
-    id: '1',
-    titre: 'Nid de poule Avenue de l\'Indépendance',
-    entreprise: 'COLAS Madagascar',
-    status: 'EN_COURS' as 'EN_COURS' | 'TERMINE',
-    latitude: -18.8792,
-    longitude: 47.5079
-  }
-});
-
 function countByStatus(status: string): number {
   return signalements.value.filter(s => s.statut?.code === status).length;
-}
-
-function showTestNotification() {
-  console.log('🔔 Affichage notification de test...');
-  
-  // Alterner entre deux types de notifications pour la démo
-  const notifications = [
-    {
-      title: 'Mise à jour de votre signalement',
-      body: 'Votre signalement "Nid de poule Avenue de l\'Indépendance" est maintenant en cours de traitement. Entreprise en charge : COLAS Madagascar',
-      timestamp: new Date().toISOString(),
-      signalementData: {
-        id: '1',
-        titre: 'Nid de poule Avenue de l\'Indépendance',
-        entreprise: 'COLAS Madagascar',
-        status: 'EN_COURS' as 'EN_COURS' | 'TERMINE',
-        latitude: -18.8792,
-        longitude: 47.5079
-      }
-    },
-    {
-      title: 'Signalement terminé',
-      body: 'Votre signalement "Route dégradée Analakely" a été traité avec succès. Entreprise en charge : SOGEA SATOM',
-      timestamp: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
-      signalementData: {
-        id: '2',
-        titre: 'Route dégradée Analakely',
-        entreprise: 'SOGEA SATOM',
-        status: 'TERMINE' as 'EN_COURS' | 'TERMINE',
-        latitude: -18.91,
-        longitude: 47.525
-      }
-    }
-  ];
-  
-  const randomNotif = notifications[Math.floor(Math.random() * notifications.length)];
-  currentNotification.value = randomNotif;
-  showNotification.value = true;
-  
-  console.log('✅ Notification définie:', {
-    visible: showNotification.value,
-    notification: currentNotification.value
-  });
-}
-
-function closeNotification() {
-  showNotification.value = false;
-}
-
-function focusOnLocation(coords: { latitude: number; longitude: number }) {
-  center.value = [coords.latitude, coords.longitude];
-  zoom.value = 16; // Zoom pour bien voir le signalement
 }
 
 onMounted(() => {
@@ -599,35 +516,6 @@ function formatCurrency(amount: number | null | undefined): string {
 .add-btn ion-icon {
   font-size: 28px;
   color: #0a0a0f;
-}
-
-/* Demo Notification Button */
-.demo-btn {
-  position: fixed;
-  bottom: 140px;
-  right: 20px;
-  z-index: 1000;
-  width: 48px;
-  height: 48px;
-  border-radius: 24px;
-  background: linear-gradient(135deg, #3880ff 0%, #5260ff 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 6px 20px rgba(56, 128, 255, 0.4);
-  cursor: pointer;
-  animation: pulse 2s infinite;
-}
-
-.demo-btn ion-icon {
-  font-size: 22px;
-  color: white;
-}
-
-@keyframes pulse {
-  0% { box-shadow: 0 6px 20px rgba(56, 128, 255, 0.4); }
-  50% { box-shadow: 0 6px 20px rgba(56, 128, 255, 0.8); }
-  100% { box-shadow: 0 6px 20px rgba(56, 128, 255, 0.4); }
 }
 
 /* Detail Sheet */
