@@ -1,0 +1,46 @@
+Analyse le projet mobile , puis cherche ou est ce qu'on recois le FCM Token unique a l'appareil puis :
+- Il faut associer le token à l’utilisateur connecté
+    user se connecte
+        ↓
+    récupérer FCM token
+        ↓
+    enregistrer token sous son UID
+
+- Il faut sauvegarder le token :
+    ✅ À chaque login
+    ✅ Au premier lancement
+    ✅ Quand le token change
+
+- voila la structure d'un user dans le firebase : 
+    createdAt "2026-01-27T06:24:41.997Z"
+    (string)
+    displayName "Utilisateur"
+    (string)
+    email "user1@gmail.com"
+    (string)
+    isVisitor false
+    (boolean)
+    role "USER"
+    (string)
+    tentatives 0
+    (number)
+    uid "qcc3OzGqqydEg0czqoR8B5B93t33"
+    (string)
+    updatedAt "2026-01-27T06:24:41.997Z" 
+
+    - Et donc on va ajouter un nouveau champ pour stocker la liste de token dans le json Utilisateur
+
+- Cas 1 : Déconnexion , on supprime le token dans l'user
+
+Voila le code dans la partie mobile , maintenant analyse le projet node 
+et lors de la syncronisation ou le web envoye les données locale dans le firestore ,
+puis analyse le projet car maintenant quand il y a un changement de status de signalement 
+le projet node back-api doit envoyer a tout les appareils de l'utilisateur qui a lancer le signalement 
+L'utilisateur recoit donc une notif a chaque doit ou un des ses signalement change de status
+
+reponces aux questions :
+1- juste une liste de token simple
+2- l'utilisateur peut effectivement se connecter sur plusieur appareils et on garde tous ses token
+3- garde le titre mais ajoute aussi dans le coprs on met le titre du signalement ,l'entreprise en charge(si il y en a) et enfin le nouveau status(ne donne pas le status comme ca formule le en phrase)
+4- Tous les status faus "nouveau" , le projet a trois status_code 'NOUVEAU','EN_COURS' et 'TERMINE'
+5- oui le fichier firebase-service-account.json est deja configuré
