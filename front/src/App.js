@@ -117,6 +117,8 @@ function MainApp() {
   const [signalements, setSignalements] = useState([]);
   const [stats, setStats] = useState({});
   const [loadingStats, setLoadingStats] = useState(true);
+  const [statistiquesTraitement, setStatistiquesTraitement] = useState([]);
+  const [loadingTraitement, setLoadingTraitement] = useState(true);
   const [viewMode, setViewMode] = useState('map'); // 'map' or 'dashboard'
   const { userProfile, isVisitor, logout, exitVisitorMode } = useAuth();
   const navigate = useNavigate();
@@ -152,6 +154,20 @@ function MainApp() {
     setLoadingStats(false);
   };
 
+  // Charger les statistiques de traitement
+  const fetchStatistiquesTraitement = async () => {
+    setLoadingTraitement(true);
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/statistiques/traitement`);
+      const data = await response.json();
+      setStatistiquesTraitement(data);
+    } catch (error) {
+      console.error('Erreur chargement statistiques traitement:', error);
+      setStatistiquesTraitement([]);
+    }
+    setLoadingTraitement(false);
+  };
+
   useEffect(() => {
     // Vérifier la connexion à l'API
     fetch(`${config.api.baseUrl}/`)
@@ -162,6 +178,7 @@ function MainApp() {
     // Charger les données
     fetchSignalements();
     fetchStats();
+    fetchStatistiquesTraitement();
   }, []);
 
   // Rafraîchir les données quand le manager panel se ferme
@@ -169,6 +186,7 @@ function MainApp() {
     setShowManagerPanel(false);
     fetchSignalements();
     fetchStats();
+    fetchStatistiquesTraitement();
   };
 
   // Vérifier si l'utilisateur est manager
@@ -243,7 +261,11 @@ function MainApp() {
           </div>
           {/* Bouton Synchroniser visible uniquement pour le Manager */}
           {isManager && (
-            <button className="refresh-btn" onClick={() => { fetchSignalements(); fetchStats(); }}>
+            <button className="refresh-btn" onClick={() => { 
+              fetchSignalements(); 
+              fetchStats(); 
+              fetchStatistiquesTraitement();
+            }}>
               🔄 Synchroniser
             </button>
           )}
@@ -266,7 +288,12 @@ function MainApp() {
             />
           </div>
         ) : (
-          <Dashboard stats={stats} loading={loadingStats} />
+          <Dashboard 
+            stats={stats} 
+            loading={loadingStats}
+            statistiquesTraitement={statistiquesTraitement}
+            loadingTraitement={loadingTraitement}
+          />
         )}
       </main>
 

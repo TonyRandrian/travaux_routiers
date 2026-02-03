@@ -78,6 +78,32 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// GET - Statistiques de traitement par entreprise (Dashboard)
+// IMPORTANT: Cette route doit être AVANT /:id pour ne pas être interceptée
+router.get('/statistiques/traitement', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        entreprise_id,
+        entreprise_nom,
+        nombre_signalements_termines,
+        ROUND(delai_moyen_jours::numeric, 2) as delai_moyen_jours,
+        delai_min_jours,
+        delai_max_jours,
+        budget_total,
+        surface_totale_m2,
+        ROUND(avancement_moyen::numeric, 2) as avancement_moyen
+      FROM v_statistiques_traitement
+      ORDER BY entreprise_nom
+    `);
+    
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération statistiques traitement:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET - Récupérer un signalement par ID
 router.get('/:id', async (req, res) => {
   try {
