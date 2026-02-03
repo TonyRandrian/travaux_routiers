@@ -10,6 +10,7 @@ import {
 import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
+import { fcmService } from '@/services/fcmService';
 
 const MAX_TENTATIVES = 3;
 
@@ -30,10 +31,20 @@ export const useAuthStore = defineStore('auth', () => {
       return;
     }
     loading.value = true;
+    
+    // Initialiser FCM
+    fcmService.initialize();
+    
     return onAuthStateChanged(auth, async (user) => {
       currentUser.value = user;
       if (user) {
         await fetchUserProfile(user.uid);
+        
+        // Sauvegarder le token FCM pour cet utilisateur
+        await fcmService.saveTokenForUser(user.uid);
+        
+        // Configurer l'écouteur de refresh token
+        fcmService.setupTokenRefreshListener(user.uid);
       } else {
         userProfile.value = null;
       }
@@ -104,6 +115,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       // Charger le profil utilisateur
       await fetchUserProfile(userCredential.user.uid);
+      
+      // Sauvegarder le token FCM après connexion réussie
+      await fcmService.saveTokenForUser(userCredential.user.uid);
       
       return userCredential;
     } catch (err: any) {
@@ -231,6 +245,12 @@ export const useAuthStore = defineStore('auth', () => {
         userProfile.value = null;
         return;
       }
+      
+      // Supprimer le token FCM avant la déconnexion
+      if (currentUser.value) {
+        await fcmService.removeTokenForUser(currentUser.value.uid);
+      }
+      
       await signOut(auth);
       userProfile.value = null;
     } catch (err: any) {
