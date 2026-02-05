@@ -1,21 +1,32 @@
 import { ref } from 'vue';
 import { Camera, CameraResultType, CameraSource, Photo } from '@capacitor/camera';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '@/config/firebase';
 import type { PhotoSignalement } from '@/types';
+
+// Configuration Cloudinary depuis les variables d'environnement
+const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || '';
+const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || 'travaux_routiers';
+
+// URL d'upload Cloudinary
+const CLOUDINARY_UPLOAD_URL = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
 // Qualité de compression (0-100)
 const COMPRESSION_QUALITY = 100;
-// Taille maximum en pixels (largeur ou hauteur)
-const MAX_IMAGE_SIZE = 1200;
 
 /**
- * Composable pour gérer l'upload de photos vers Firebase Storage
+ * Composable pour gérer l'upload de photos vers Cloudinary (GRATUIT)
+ * Les URLs sont ensuite stockées dans Firebase Firestore
  */
 export function usePhotoUpload() {
   const uploading = ref(false);
   const uploadProgress = ref(0);
   const error = ref<string | null>(null);
+
+  /**
+   * Vérifie si Cloudinary est configuré
+   */
+  function isCloudinaryConfigured(): boolean {
+    return CLOUDINARY_CLOUD_NAME !== '' && CLOUDINARY_CLOUD_NAME !== 'votre_cloud_name';
+  }
 
   /**
    * Prendre une photo avec la caméra (fonctionne sur web et mobile)
@@ -91,25 +102,12 @@ export function usePhotoUpload() {
   }
 
   /**
-   * Convertit un blob en base64
-   */
-  function blobToBase64(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = reject;
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  /**
    * Compresse une image pour réduire sa taille
    */
   async function compressImage(blob: Blob, maxWidth: number = 800, quality: number = 0.7): Promise<Blob> {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = () => {
-        // Calculer les nouvelles dimensions
         let width = img.width;
         let height = img.height;
         
@@ -118,7 +116,6 @@ export function usePhotoUpload() {
           width = maxWidth;
         }
 
-        // Créer le canvas
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
@@ -129,10 +126,8 @@ export function usePhotoUpload() {
           return;
         }
 
-        // Dessiner l'image redimensionnée
         ctx.drawImage(img, 0, 0, width, height);
 
-        // Convertir en blob compressé
         canvas.toBlob(
           (compressedBlob) => {
             if (compressedBlob) {
@@ -153,15 +148,17 @@ export function usePhotoUpload() {
   }
 
   /**
-   * Upload une photo vers Firebase Storage
+   * Upload une photo vers Cloudinary (GRATUIT, pas besoin de carte bancaire)
+   * Retourne l'URL qui sera stockée dans Firebase Firestore
    */
   async function uploadPhoto(
     signalementId: string,
     photo: Photo,
     ordre: number = 0
   ): Promise<PhotoSignalement | null> {
-    if (!storage) {
-      error.value = 'Firebase Storage non configuré';
+    if (!isCloudinaryConfigured()) {
+      error.value = 'Cloudinary non configuré. Ajoutez VITE_CLOUDINARY_CLOUD_NAME dans .env';
+      console.error('Cloudinary non configuré. Cloud name:', CLOUDINARY_CLOUD_NAME);
       return null;
     }
 
@@ -188,39 +185,49 @@ export function usePhotoUpload() {
 
       // Générer un nom de fichier unique
       const timestamp = Date.now();
-      const fileName = `photo_${timestamp}_${ordre}.jpg`;
-      const firebasePath = `signalements/${signalementId}/${fileName}`;
+      const fileName = `signalement_${signalementId}_${timestamp}_${ordre}`;
 
-      // Créer la référence Firebase Storage
-      const photoRef = storageRef(storage, firebasePath);
+      // Préparer les données pour Cloudinary
+      const formData = new FormData();
+      formData.append('file', blob, `${fileName}.jpg`);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+      formData.append('folder', `travaux_routiers/signalements/${signalementId}`);
+      formData.append('public_id', fileName);
 
       uploadProgress.value = 50;
 
-      // Upload le blob compressé
-      await uploadBytes(photoRef, blob, {
-        contentType: 'image/jpeg'
+      // Upload vers Cloudinary
+      console.log('Upload vers Cloudinary...');
+      const uploadResponse = await fetch(CLOUDINARY_UPLOAD_URL, {
+        method: 'POST',
+        body: formData
       });
 
       uploadProgress.value = 80;
 
-      // Récupérer l'URL de téléchargement
-      const downloadUrl = await getDownloadURL(photoRef);
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error?.message || 'Erreur upload Cloudinary');
+      }
 
+      const result = await uploadResponse.json();
+      
       uploadProgress.value = 100;
 
-      console.log('Photo uploadée:', downloadUrl);
+      console.log('Photo uploadée sur Cloudinary:', result.secure_url);
 
+      // Retourner les infos de la photo (URL Cloudinary stockée dans Firebase)
       return {
-        url: downloadUrl,
-        firebase_path: firebasePath,
-        nom_fichier: fileName,
+        url: result.secure_url,
+        firebase_path: `cloudinary:${result.public_id}`, // Référence Cloudinary
+        nom_fichier: `${fileName}.jpg`,
         taille_bytes: blob.size,
         mime_type: 'image/jpeg',
         ordre: ordre
       };
     } catch (err: any) {
       console.error('Erreur uploadPhoto:', err);
-      error.value = 'Erreur lors de l\'upload de la photo: ' + err.message;
+      error.value = 'Erreur lors de l\'upload: ' + err.message;
       return null;
     } finally {
       uploading.value = false;
@@ -238,12 +245,14 @@ export function usePhotoUpload() {
 
     for (let i = 0; i < photos.length; i++) {
       const photo = photos[i];
+      uploadProgress.value = Math.round((i / photos.length) * 100);
       const result = await uploadPhoto(signalementId, photo, i);
       if (result) {
         uploadedPhotos.push(result);
       }
     }
 
+    uploadProgress.value = 100;
     return uploadedPhotos;
   }
 
@@ -263,6 +272,7 @@ export function usePhotoUpload() {
     choosePhoto,
     uploadPhoto,
     uploadPhotos,
-    getPhotoPreview
+    getPhotoPreview,
+    isCloudinaryConfigured
   };
 }
