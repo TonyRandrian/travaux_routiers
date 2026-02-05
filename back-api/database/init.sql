@@ -9,3 +9,6 @@
 
 -- Migration pour la synchronisation
 \i /docker-entrypoint-initdb.d/migration_sync.sql
+
+-- Vue pour les statistiques de traitement (dashboard)
+\i /docker-entrypoint-initdb.d/vue_dashboard_traitement.sql

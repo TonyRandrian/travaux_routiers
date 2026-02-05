@@ -11,8 +11,12 @@ module.exports = {
     password: process.env.DB_PASSWORD || 'password'
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || '*',
-    credentials: true
+    origin: process.env.CORS_ORIGIN 
+      ? process.env.CORS_ORIGIN.split(',') 
+      : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
   auth: {
     // Durée de vie des sessions (en secondes) - par défaut 1 heure

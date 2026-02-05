@@ -540,7 +540,7 @@ class SyncService {
       id_entreprise: firestoreData.entreprise ? (entreprises[firestoreData.entreprise.nom] || firestoreData.entreprise.id || null) : null,
       date_signalement: firestoreData.date_signalement || firestoreData.createdAt || new Date().toISOString(),
       firebase_id: firestoreId,
-      photos: firestoreData.photos || [] // Photos du signalement
+      photos: firestoreData.photos || [],
       pourcentage_completion: firestoreData.pourcentage_completion || 0
     };
   }

@@ -14,6 +14,7 @@ services:
       - ./back-api/database/combined_script.sql:/docker-entrypoint-initdb.d/combined_script.sql
       - ./back-api/database/add_pourcentage_to_signalement.sql:/docker-entrypoint-initdb.d/add_pourcentage_to_signalement.sql
       - ./back-api/database/migration_sync.sql:/docker-entrypoint-initdb.d/migration_sync.sql
+      - ./back-api/database/vue_dashboard_traitement.sql:/docker-entrypoint-initdb.d/vue_dashboard_traitement.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-travaux_routiers}"]
       interval: 5s

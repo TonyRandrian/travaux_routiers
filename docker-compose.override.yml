@@ -1,7 +1,0 @@
-# docker-compose.override.yml
-# CONFIGURATION PERSONNELLE - Ce fichier n'est pas versionné (voir .gitignore)
-
-services:
-  tile-server:
-    volumes:
-      - C:/Users/gaylo/ITU/S5/Data/osm-travaux-routiers/region.osm.pbf:/data/region.osm.pbf:ro
