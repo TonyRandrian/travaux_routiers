@@ -194,14 +194,38 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
     
     // Récupérer le statut actuel et les infos du signalement
     const currentResult = await pool.query(`
-      SELECT s.id_statut_signalement, s.titre, u.email as utilisateur_email
+      SELECT s.id_statut_signalement, s.titre, s.firebase_id, u.email as utilisateur_email
       FROM signalement s
       LEFT JOIN utilisateur u ON s.id_utilisateur = u.id
       WHERE s.id = $1
     `, [id]);
     const currentStatut = currentResult.rows[0]?.id_statut_signalement;
     const signalementTitre = currentResult.rows[0]?.titre;
-    const utilisateurEmail = currentResult.rows[0]?.utilisateur_email;
+    let utilisateurEmail = currentResult.rows[0]?.utilisateur_email;
+    const firebaseId = currentResult.rows[0]?.firebase_id;
+    
+    // [COMMENTÉ] Les notifications ne doivent pas être envoyées ici.
+    // Le projet web utilise uniquement la base locale (PostgreSQL).
+    // Les échanges avec Firebase se font uniquement via les boutons de synchro.
+    // // Fallback: si pas d'email dans PostgreSQL, chercher dans Firestore
+    // if (!utilisateurEmail && firebaseId) {
+    //   try {
+    //     const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+    //     if (isFirebaseAvailable()) {
+    //       const db = getFirestore();
+    //       const fsDoc = await db.collection('signalements').doc(firebaseId).get();
+    //       if (fsDoc.exists) {
+    //         const fsData = fsDoc.data();
+    //         utilisateurEmail = fsData.utilisateur_email || (fsData.utilisateur && fsData.utilisateur.email) || null;
+    //         if (utilisateurEmail) {
+    //           console.log('[PUT NOTIF] Fallback email depuis Firestore:', utilisateurEmail);
+    //         }
+    //       }
+    //     }
+    //   } catch (fbErr) {
+    //     console.error('[PUT NOTIF] Erreur fallback email Firestore:', fbErr.message);
+    //   }
+    // }
     
     // Déterminer le pourcentage d'avancement selon le statut
     let pourcentage_completion = null;
@@ -250,21 +274,26 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
         VALUES ($1, $2)
       `, [id, id_statut_signalement]);
       
-      // Envoyer une notification push à l'utilisateur
-      if (utilisateurEmail && newStatutCode && newStatutCode !== 'NOUVEAU') {
-        try {
-          const notifResult = await NotificationService.notifyStatusChange(
-            utilisateurEmail,
-            { id, titre: signalementTitre || titre },
-            newStatutCode,
-            entrepriseNom
-          );
-          console.log('Notification envoyée:', notifResult);
-        } catch (notifError) {
-          console.error('Erreur envoi notification:', notifError);
-          // Ne pas bloquer la mise à jour si la notification échoue
-        }
-      }
+      // [COMMENTÉ] Les notifications sont envoyées uniquement lors de la synchro (boutons Exporter/Synchroniser).
+      // Le PUT ne fait que modifier la base locale PostgreSQL, pas d'échange Firebase ici.
+      // // Envoyer une notification push à l'utilisateur
+      // if (utilisateurEmail && newStatutCode && newStatutCode !== 'NOUVEAU') {
+      //   try {
+      //     console.log('[PUT NOTIF] Envoi notification à', utilisateurEmail, 'statut:', newStatutCode, 'entreprise:', entrepriseNom);
+      //     const notifResult = await NotificationService.notifyStatusChange(
+      //       utilisateurEmail,
+      //       { id, titre: signalementTitre || titre },
+      //       newStatutCode,
+      //       entrepriseNom
+      //     );
+      //     console.log('[PUT NOTIF] Résultat:', JSON.stringify(notifResult));
+      //   } catch (notifError) {
+      //     console.error('[PUT NOTIF] ❌ Erreur envoi notification:', notifError);
+      //     // Ne pas bloquer la mise à jour si la notification échoue
+      //   }
+      // } else {
+      //   console.log('[PUT NOTIF] Notification non envoyée - email:', utilisateurEmail, 'statut:', newStatutCode);
+      // }
     }
     
     res.json(result.rows[0]);

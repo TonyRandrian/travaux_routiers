@@ -47,24 +47,38 @@ class NotificationService {
       return [];
     }
 
+    if (!userEmail) {
+      console.warn('Email utilisateur non fourni');
+      return [];
+    }
+
     try {
       const db = getFirestore();
       
-      // Chercher l'utilisateur par email dans Firestore
-      const usersSnapshot = await db.collection('users')
+      // Chercher l'utilisateur par email dans Firestore (essayer plusieurs variantes)
+      let usersSnapshot = await db.collection('users')
         .where('email', '==', userEmail)
         .limit(1)
         .get();
 
+      // Si pas trouvé, essayer avec email en minuscules
       if (usersSnapshot.empty) {
-        console.log('Utilisateur non trouvé dans Firestore:', userEmail);
+        console.log('Utilisateur non trouvé avec email exact, essai en minuscules...');
+        usersSnapshot = await db.collection('users')
+          .where('email', '==', userEmail.toLowerCase())
+          .limit(1)
+          .get();
+      }
+
+      if (usersSnapshot.empty) {
+        console.log('Utilisateur non trouvé dans Firestore pour email:', userEmail);
         return [];
       }
 
       const userData = usersSnapshot.docs[0].data();
       const tokens = userData.fcmTokens || [];
       
-      console.log(`Tokens FCM trouvés pour ${userEmail}:`, tokens.length);
+      console.log(`Tokens FCM trouvés pour ${userEmail}:`, tokens.length, tokens.length > 0 ? `(${tokens[0].substring(0, 20)}...)` : '');
       return tokens;
     } catch (error) {
       console.error('Erreur récupération tokens FCM:', error);
@@ -136,6 +150,12 @@ class NotificationService {
    * Notifier un utilisateur du changement de statut de son signalement
    */
   static async notifyStatusChange(userEmail, signalement, newStatutCode, entreprise) {
+    console.log('=== NOTIFICATION STATUS CHANGE ===');
+    console.log('Email utilisateur:', userEmail);
+    console.log('Signalement:', signalement);
+    console.log('Nouveau statut:', newStatutCode);
+    console.log('Entreprise:', entreprise);
+    
     // Ne pas notifier pour le statut NOUVEAU
     if (newStatutCode === 'NOUVEAU') {
       console.log('Pas de notification pour statut NOUVEAU');
@@ -144,8 +164,10 @@ class NotificationService {
 
     // Récupérer les tokens de l'utilisateur
     const tokens = await this.getUserFcmTokens(userEmail);
+    console.log('Tokens FCM récupérés:', tokens);
     
     if (tokens.length === 0) {
+      console.log('Aucun token FCM trouvé pour:', userEmail);
       return { success: false, reason: 'Aucun token FCM' };
     }
 

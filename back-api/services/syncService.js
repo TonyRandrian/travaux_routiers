@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+const NotificationService = require('./notificationService');
 
 // Collection Firestore pour les signalements
 const SIGNALEMENTS_COLLECTION = 'signalements';
@@ -81,18 +82,39 @@ class SyncService {
             [firestoreId]
           );
 
-          // Mapper les données Firestore vers PostgreSQL
-          const pgData = this.mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises);
+          // Mapper les données Firestore vers PostgreSQL (async pour récupérer l'utilisateur)
+          const pgData = await this.mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises);
 
           if (existingResult.rows.length > 0) {
-            // Mise à jour si le signalement existe
-            // Ne pas écraser les données modifiées côté serveur (statut, budget, etc.)
-            // On ne met à jour que si last_sync_from_firebase est plus ancien
-            results.details.push({
-              action: 'skipped',
-              firebase_id: firestoreId,
-              reason: 'Déjà synchronisé'
-            });
+            // Le signalement existe déjà - mettre à jour l'utilisateur s'il est manquant
+            const existingId = existingResult.rows[0].id;
+            
+            // Vérifier si l'utilisateur est manquant
+            const checkUser = await pool.query(
+              'SELECT id_utilisateur FROM signalement WHERE id = $1',
+              [existingId]
+            );
+            
+            if (!checkUser.rows[0]?.id_utilisateur && pgData.id_utilisateur) {
+              // Mettre à jour avec l'utilisateur trouvé
+              await pool.query(
+                'UPDATE signalement SET id_utilisateur = $1 WHERE id = $2',
+                [pgData.id_utilisateur, existingId]
+              );
+              results.updated++;
+              results.details.push({
+                action: 'updated_user',
+                firebase_id: firestoreId,
+                pg_id: existingId,
+                id_utilisateur: pgData.id_utilisateur
+              });
+            } else {
+              results.details.push({
+                action: 'skipped',
+                firebase_id: firestoreId,
+                reason: 'Déjà synchronisé'
+              });
+            }
           } else {
             // Créer un nouveau signalement
             const insertResult = await pool.query(`
@@ -149,6 +171,11 @@ class SyncService {
         }
       }
 
+      // S'assurer que les documents utilisateurs existent dans Firestore
+      // (nécessaire pour pouvoir recevoir les tokens FCM depuis l'app mobile)
+      const userResults = await this.ensureUsersInFirestore();
+      console.log(`Documents utilisateurs créés dans Firestore: ${userResults.created}`);
+
       return results;
     } catch (error) {
       throw new Error(`Erreur synchronisation depuis Firestore: ${error.message}`);
@@ -199,9 +226,38 @@ class SyncService {
         ORDER BY s.date_signalement DESC
       `);
 
+      // === REPARATION: lier les signalements sans id_utilisateur ===
+      const orphanRows = pgResult.rows.filter(r => !r.utilisateur_email && r.firebase_id);
+      if (orphanRows.length > 0) {
+        console.log(`[SYNC REPAIR] ${orphanRows.length} signalement(s) sans utilisateur, tentative de réparation...`);
+        for (const orphan of orphanRows) {
+          try {
+            const fsDoc = await db.collection(SIGNALEMENTS_COLLECTION).doc(orphan.firebase_id).get();
+            if (fsDoc.exists) {
+              const fsData = fsDoc.data();
+              const email = fsData.utilisateur_email || (fsData.utilisateur && fsData.utilisateur.email) || null;
+              if (email) {
+                // Chercher l'utilisateur par email dans PostgreSQL
+                const userResult = await pool.query('SELECT id FROM utilisateur WHERE email = $1', [email]);
+                if (userResult.rows.length > 0) {
+                  await pool.query('UPDATE signalement SET id_utilisateur = $1 WHERE id = $2', [userResult.rows[0].id, orphan.id]);
+                  orphan.utilisateur_email = email; // Mettre à jour en mémoire aussi
+                  console.log(`[SYNC REPAIR] ✅ Signalement ${orphan.id} lié à ${email} (user id: ${userResult.rows[0].id})`);
+                } else {
+                  console.log(`[SYNC REPAIR] ⚠ Email ${email} trouvé dans Firestore mais pas dans PostgreSQL pour signalement ${orphan.id}`);
+                }
+              }
+            }
+          } catch (repairErr) {
+            console.error(`[SYNC REPAIR] Erreur réparation signalement ${orphan.id}:`, repairErr.message);
+          }
+        }
+      }
+
       const batch = db.batch();
       let batchCount = 0;
       const BATCH_LIMIT = 500; // Limite Firestore
+      const notificationsToSend = []; // Notifications à envoyer après le commit
 
       for (const row of pgResult.rows) {
         try {
@@ -210,8 +266,41 @@ class SyncService {
 
           let docRef;
           if (row.firebase_id) {
-            // Mettre à jour le document existant
+            // Vérifier si le statut a changé pour envoyer une notification
             docRef = db.collection(SIGNALEMENTS_COLLECTION).doc(row.firebase_id);
+            try {
+              const existingDoc = await docRef.get();
+              if (existingDoc.exists) {
+                const oldData = existingDoc.data();
+                const oldStatutCode = oldData.statut_code || oldData.statut?.code || 'NOUVEAU';
+                const newStatutCode = row.statut_code || 'NOUVEAU';
+                
+                // Fallback: si PostgreSQL n'a pas l'email, chercher dans le doc Firestore
+                let emailForNotif = row.utilisateur_email;
+                if (!emailForNotif) {
+                  emailForNotif = oldData.utilisateur_email || (oldData.utilisateur && oldData.utilisateur.email) || null;
+                  if (emailForNotif) {
+                    console.log(`[SYNC NOTIF] Fallback email depuis Firestore: ${emailForNotif}`);
+                  }
+                }
+                
+                console.log(`[SYNC NOTIF] Signalement ${row.id} "${row.titre}": statut ${oldStatutCode} → ${newStatutCode} (email: ${emailForNotif || 'AUCUN'})`);
+                
+                if (oldStatutCode !== newStatutCode && newStatutCode !== 'NOUVEAU' && emailForNotif) {
+                  console.log(`[SYNC NOTIF] ✅ Changement de statut détecté, notification prévue pour ${emailForNotif}`);
+                  notificationsToSend.push({
+                    email: emailForNotif,
+                    signalement: { id: row.id, titre: row.titre },
+                    newStatutCode: newStatutCode,
+                    entreprise: row.entreprise || null
+                  });
+                }
+              }
+            } catch (checkErr) {
+              console.error(`[SYNC NOTIF] Erreur vérification statut:`, checkErr.message);
+            }
+
+            // Mettre à jour le document existant
             batch.set(docRef, firestoreData, { merge: true });
             results.updated++;
             results.details.push({
@@ -258,6 +347,23 @@ class SyncService {
       // Commit final si des documents restants
       if (batchCount > 0) {
         await batch.commit();
+      }
+
+      // Envoyer les notifications après le commit
+      console.log(`[SYNC NOTIF] ${notificationsToSend.length} notification(s) à envoyer`);
+      for (const notif of notificationsToSend) {
+        try {
+          console.log(`[SYNC NOTIF] Envoi notification à ${notif.email} pour signalement "${notif.signalement.titre}" → ${notif.newStatutCode}`);
+          const notifResult = await NotificationService.notifyStatusChange(
+            notif.email,
+            notif.signalement,
+            notif.newStatutCode,
+            notif.entreprise
+          );
+          console.log(`[SYNC NOTIF] Résultat:`, JSON.stringify(notifResult));
+        } catch (notifError) {
+          console.error(`[SYNC NOTIF] ❌ Erreur envoi notification:`, notifError.message);
+        }
       }
 
       // Mettre à jour les métadonnées de synchronisation
@@ -376,9 +482,9 @@ class SyncService {
             const nom = nameParts.slice(1).join(' ') || '';
 
             await pool.query(`
-              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid, tentatives, bloque)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseUid, firebaseTentatives, firebaseBloque]);
+              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, tentatives, bloque)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseTentatives, firebaseBloque]);
 
             results.imported++;
             results.details.push({
@@ -395,9 +501,9 @@ class SyncService {
             if (existingUser.tentatives !== firebaseTentatives || existingUser.bloque !== firebaseBloque) {
               await pool.query(`
                 UPDATE utilisateur 
-                SET tentatives = $1, bloque = $2, firebase_uid = COALESCE(firebase_uid, $3)
-                WHERE id = $4
-              `, [firebaseTentatives, firebaseBloque, firebaseUid, existingUser.id]);
+                SET tentatives = $1, bloque = $2
+                WHERE id = $3
+              `, [firebaseTentatives, firebaseBloque, existingUser.id]);
 
               results.updated++;
               results.details.push({
@@ -451,20 +557,15 @@ class SyncService {
 
       for (const user of pgUsers.rows) {
         try {
-          // Déterminer l'ID du document Firebase
-          let docId = user.firebase_uid;
-          
-          if (!docId) {
-            // Créer un nouvel ID pour cet utilisateur
-            docId = `pg_${user.id}`;
-          }
+          // Déterminer l'ID du document Firebase - utiliser pg_id comme fallback
+          const docId = `pg_${user.id}`;
 
           const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
           
           // Envoyer les données PostgreSQL vers Firebase (source de vérité = PostgreSQL)
+          // NE PAS envoyer le mot de passe vers Firestore
           await userDocRef.set({
             email: user.email,
-            password: user.mot_de_passe,
             displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
             nom: user.nom || '',
             prenom: user.prenom || '',
@@ -477,16 +578,7 @@ class SyncService {
             lastSyncAt: new Date().toISOString()
           }, { merge: true });
 
-          // Mettre à jour le firebase_uid si c'était un nouvel utilisateur
-          if (!user.firebase_uid) {
-            await pool.query(
-              'UPDATE utilisateur SET firebase_uid = $1 WHERE id = $2',
-              [docId, user.id]
-            );
-            results.exported++;
-          } else {
-            results.updated++;
-          }
+          results.exported++;
 
           results.details.push({
             action: user.firebase_uid ? 'updated' : 'exported',
@@ -517,15 +609,139 @@ class SyncService {
   }
 
   /**
+   * S'assurer que les documents utilisateurs existent dans Firestore 
+   * (nécessaire pour pouvoir ajouter les tokens FCM)
+   */
+  static async ensureUsersInFirestore() {
+    if (!this.isAvailable()) {
+      console.warn('Firebase non disponible pour créer les documents utilisateurs');
+      return { created: 0, errors: [] };
+    }
+
+    const db = getFirestore();
+    const results = { created: 0, errors: [] };
+
+    try {
+      // Récupérer tous les utilisateurs depuis PostgreSQL
+      const pgUsers = await pool.query(`
+        SELECT email, nom, prenom, tentatives, bloque, created_at
+        FROM utilisateur 
+        WHERE email IS NOT NULL AND email != ''
+      `);
+
+      for (const user of pgUsers.rows) {
+        try {
+          // Générer un ID basé sur l'email
+          const uid = user.email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          
+          const userDocRef = db.collection(USERS_COLLECTION).doc(uid);
+          const userDoc = await userDocRef.get();
+
+          if (!userDoc.exists) {
+            // Créer le document utilisateur dans Firestore
+            await userDocRef.set({
+              uid,
+              email: user.email,
+              displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || 'Utilisateur',
+              role: 'user',
+              tentatives: user.tentatives || 0,
+              bloque: user.bloque || false,
+              createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
+              fcmTokens: [] // Liste vide, les tokens seront ajoutés par l'app mobile
+            });
+
+            results.created++;
+            console.log('Document utilisateur créé dans Firestore:', user.email, '->', uid);
+          }
+        } catch (userError) {
+          results.errors.push({
+            email: user.email,
+            error: userError.message
+          });
+        }
+      }
+
+      return results;
+    } catch (error) {
+      console.error('Erreur ensureUsersInFirestore:', error);
+      return { created: 0, errors: [{ error: error.message }] };
+    }
+  }
+
+  /**
+   * Trouver ou créer un utilisateur dans PostgreSQL à partir de l'email
+   */
+  static async findOrCreateUser(utilisateurData) {
+    if (!utilisateurData || !utilisateurData.email) {
+      return null;
+    }
+
+    try {
+      // Chercher l'utilisateur par email
+      const existingUser = await pool.query(
+        'SELECT id FROM utilisateur WHERE email = $1',
+        [utilisateurData.email]
+      );
+
+      if (existingUser.rows.length > 0) {
+        return existingUser.rows[0].id;
+      }
+
+      // Créer l'utilisateur s'il n'existe pas (role = user par défaut)
+      const roleResult = await pool.query(
+        "SELECT id FROM role WHERE code = 'USER' LIMIT 1"
+      );
+      const roleId = roleResult.rows[0]?.id || 2;
+
+      const insertResult = await pool.query(`
+        INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
+        VALUES ($1, 'firebase_user', $2, $3, $4)
+        ON CONFLICT (email) DO UPDATE SET nom = EXCLUDED.nom
+        RETURNING id
+      `, [
+        utilisateurData.email,
+        utilisateurData.nom || 'Utilisateur',
+        utilisateurData.prenom || '',
+        roleId
+      ]);
+
+      console.log('Utilisateur créé/trouvé:', utilisateurData.email, '->', insertResult.rows[0]?.id);
+      return insertResult.rows[0]?.id || null;
+    } catch (error) {
+      console.error('Erreur findOrCreateUser:', error);
+      return null;
+    }
+  }
+
+  /**
    * Mapper les données Firestore vers le format PostgreSQL
    */
-  static mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises) {
-    // Supporter le nouveau format imbriqué pour le statut
+  static async mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises) {
+    // Récupérer l'ID de l'utilisateur - essayer utilisateur objet puis utilisateur_email
+    let utilisateurObj = firestoreData.utilisateur;
+    if (!utilisateurObj && firestoreData.utilisateur_email) {
+      utilisateurObj = { email: firestoreData.utilisateur_email };
+    }
+    const idUtilisateur = await this.findOrCreateUser(utilisateurObj);
+    
+    // Récupérer l'ID de l'entreprise si présente
+    let idEntreprise = null;
+    if (firestoreData.entreprise) {
+      if (firestoreData.entreprise.id) {
+        idEntreprise = firestoreData.entreprise.id;
+      } else if (firestoreData.entreprise.nom) {
+        idEntreprise = entreprises[firestoreData.entreprise.nom] || null;
+      }
+    }
+
+    // Récupérer le code statut
     let statutCode = 'NOUVEAU';
-    if (firestoreData.statut && typeof firestoreData.statut === 'object' && firestoreData.statut.code) {
-      statutCode = firestoreData.statut.code;
-    } else if (firestoreData.statut_code) {
-      statutCode = firestoreData.statut_code;
+    if (firestoreData.statut) {
+      if (firestoreData.statut.code) {
+        statutCode = firestoreData.statut.code;
+      } else if (typeof firestoreData.statut === 'string') {
+        statutCode = firestoreData.statut;
+      }
     }
 
     return {
@@ -536,8 +752,8 @@ class SyncService {
       surface_m2: firestoreData.surface_m2 || firestoreData.surface || null,
       budget: firestoreData.budget || null,
       id_statut_signalement: statuts[statutCode] || statuts['NOUVEAU'] || 1,
-      id_utilisateur: null, // Sera lié plus tard si nécessaire
-      id_entreprise: firestoreData.entreprise ? (entreprises[firestoreData.entreprise.nom] || firestoreData.entreprise.id || null) : null,
+      id_utilisateur: idUtilisateur,
+      id_entreprise: idEntreprise,
       date_signalement: firestoreData.date_signalement || firestoreData.createdAt || new Date().toISOString(),
       firebase_id: firestoreId,
       photos: firestoreData.photos || [],
