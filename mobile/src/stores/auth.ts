@@ -32,19 +32,24 @@ export const useAuthStore = defineStore('auth', () => {
     }
     loading.value = true;
     
-    // Initialiser FCM
-    fcmService.initialize();
+    // Initialiser FCM avec await pour s'assurer que le token est prêt
+    console.log('initAuthListener: Initialisation FCM...');
+    fcmService.initialize(); // Lance l'init en parallèle (la Promise est stockée)
     
     return onAuthStateChanged(auth, async (user) => {
+      console.log('onAuthStateChanged: user =', user?.uid || 'null');
       currentUser.value = user;
       if (user) {
         await fetchUserProfile(user.uid);
         
-        // Sauvegarder le token FCM pour cet utilisateur
-        await fcmService.saveTokenForUser(user.uid);
-        
-        // Configurer l'écouteur de refresh token
-        fcmService.setupTokenRefreshListener(user.uid);
+        // Sauvegarder le token FCM - getToken() attend la fin de initialize()
+        console.log('onAuthStateChanged: Tentative sauvegarde token FCM...');
+        try {
+          await fcmService.saveTokenForUser(user.uid);
+          fcmService.setupTokenRefreshListener(user.uid);
+        } catch (err) {
+          console.error('Erreur sauvegarde token FCM:', err);
+        }
       } else {
         userProfile.value = null;
       }
@@ -52,17 +57,62 @@ export const useAuthStore = defineStore('auth', () => {
     });
   }
 
+  // Helper: trouver le document utilisateur (par UID d'abord, puis par email)
+  async function findUserDocRef(uid: string): Promise<{ ref: any; data: any } | null> {
+    if (!db) return null;
+
+    // 1. Chercher par UID (doc ID = uid)
+    const uidRef = doc(db, 'users', uid);
+    const uidSnap = await getDoc(uidRef);
+    if (uidSnap.exists()) {
+      console.log('findUserDoc: Trouvé par UID:', uid);
+      return { ref: uidRef, data: uidSnap.data() };
+    }
+
+    // 2. Chercher par email
+    const email = currentUser.value?.email || auth?.currentUser?.email;
+    if (email) {
+      const usersRef = collection(db, 'users');
+      
+      // Email exact
+      const snap = await getDocs(query(usersRef, where('email', '==', email)));
+      if (!snap.empty) {
+        console.log('findUserDoc: Trouvé par email:', email, 'docId:', snap.docs[0].id);
+        return { ref: snap.docs[0].ref, data: snap.docs[0].data() };
+      }
+
+      // Email lowercase
+      if (email !== email.toLowerCase()) {
+        const snapLower = await getDocs(query(usersRef, where('email', '==', email.toLowerCase())));
+        if (!snapLower.empty) {
+          console.log('findUserDoc: Trouvé par email lowercase:', email.toLowerCase());
+          return { ref: snapLower.docs[0].ref, data: snapLower.docs[0].data() };
+        }
+      }
+    }
+
+    console.log('findUserDoc: Aucun document trouvé pour uid:', uid, 'email:', email);
+    return null;
+  }
+
   // Recuperer le profil utilisateur
   async function fetchUserProfile(uid: string) {
     if (!db) return;
     try {
-      const userDocRef = doc(db, 'users', uid);
-      const userDoc = await getDoc(userDocRef);
+      const found = await findUserDocRef(uid);
 
-      if (userDoc.exists()) {
-        userProfile.value = userDoc.data() as User;
+      if (found) {
+        userProfile.value = found.data as User;
+        
+        // Si le doc n'a pas le champ uid, le mettre à jour
+        if (!found.data.uid || found.data.uid !== uid) {
+          console.log('fetchUserProfile: Mise à jour uid dans le doc existant');
+          await updateDoc(found.ref, { uid });
+        }
       } else {
-        // Document utilisateur n'existe pas, le créer
+        // Aucun document trouvé → créer un nouveau
+        console.log('fetchUserProfile: Aucun doc existant, création pour uid:', uid);
+        const { setDoc } = await import('firebase/firestore');
         const newUserProfile: User = {
           uid,
           email: currentUser.value?.email || '',
@@ -71,14 +121,11 @@ export const useAuthStore = defineStore('auth', () => {
           tentatives: 0,
           bloque: false,
           createdAt: new Date().toISOString(),
-          fcmTokens: [] // Liste vide au départ, les tokens seront ajoutés par FCM service
+          fcmTokens: []
         };
-        
-        // Créer le document dans Firestore
-        const { setDoc } = await import('firebase/firestore');
+        const userDocRef = doc(db, 'users', uid);
         await setDoc(userDocRef, newUserProfile);
-        console.log('Document utilisateur créé dans Firestore:', uid);
-        
+        console.log('fetchUserProfile: Document créé dans Firestore:', uid);
         userProfile.value = newUserProfile;
       }
     } catch (err) {
@@ -114,8 +161,10 @@ export const useAuthStore = defineStore('auth', () => {
       // 3. Connexion réussie - réinitialiser les tentatives
       try {
         if (db) {
-          const userDocRef = doc(db, 'users', userCredential.user.uid);
-          await updateDoc(userDocRef, { tentatives: 0, bloque: false });
+          const found = await findUserDocRef(userCredential.user.uid);
+          if (found) {
+            await updateDoc(found.ref, { tentatives: 0, bloque: false });
+          }
         }
       } catch (updateErr) {
         console.log('Reset tentatives ignoré:', updateErr);
@@ -124,8 +173,8 @@ export const useAuthStore = defineStore('auth', () => {
       // Charger le profil utilisateur
       await fetchUserProfile(userCredential.user.uid);
       
-      // Sauvegarder le token FCM après connexion réussie
-      await fcmService.saveTokenForUser(userCredential.user.uid);
+      // Note: Le token FCM sera sauvegardé par onAuthStateChanged
+      // qui se déclenche automatiquement après signInWithEmailAndPassword
       
       return userCredential;
     } catch (err: any) {
@@ -273,13 +322,15 @@ export const useAuthStore = defineStore('auth', () => {
 
     try {
       if (!db) throw new Error('Firestore non initialisé');
-      const userDocRef = doc(db, 'users', currentUser.value.uid);
+      
+      const found = await findUserDocRef(currentUser.value.uid);
+      if (!found) throw new Error('Document utilisateur non trouvé');
 
       if (updates.displayName) {
         await updateProfile(currentUser.value, { displayName: updates.displayName });
       }
 
-      await updateDoc(userDocRef, {
+      await updateDoc(found.ref, {
         ...updates,
         updatedAt: new Date().toISOString()
       });

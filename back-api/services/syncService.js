@@ -1,5 +1,6 @@
 const pool = require('../config/database');
 const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+const NotificationService = require('./notificationService');
 
 // Collection Firestore pour les signalements
 const SIGNALEMENTS_COLLECTION = 'signalements';
@@ -219,9 +220,38 @@ class SyncService {
         ORDER BY s.date_signalement DESC
       `);
 
+      // === REPARATION: lier les signalements sans id_utilisateur ===
+      const orphanRows = pgResult.rows.filter(r => !r.utilisateur_email && r.firebase_id);
+      if (orphanRows.length > 0) {
+        console.log(`[SYNC REPAIR] ${orphanRows.length} signalement(s) sans utilisateur, tentative de réparation...`);
+        for (const orphan of orphanRows) {
+          try {
+            const fsDoc = await db.collection(SIGNALEMENTS_COLLECTION).doc(orphan.firebase_id).get();
+            if (fsDoc.exists) {
+              const fsData = fsDoc.data();
+              const email = fsData.utilisateur_email || (fsData.utilisateur && fsData.utilisateur.email) || null;
+              if (email) {
+                // Chercher l'utilisateur par email dans PostgreSQL
+                const userResult = await pool.query('SELECT id FROM utilisateur WHERE email = $1', [email]);
+                if (userResult.rows.length > 0) {
+                  await pool.query('UPDATE signalement SET id_utilisateur = $1 WHERE id = $2', [userResult.rows[0].id, orphan.id]);
+                  orphan.utilisateur_email = email; // Mettre à jour en mémoire aussi
+                  console.log(`[SYNC REPAIR] ✅ Signalement ${orphan.id} lié à ${email} (user id: ${userResult.rows[0].id})`);
+                } else {
+                  console.log(`[SYNC REPAIR] ⚠ Email ${email} trouvé dans Firestore mais pas dans PostgreSQL pour signalement ${orphan.id}`);
+                }
+              }
+            }
+          } catch (repairErr) {
+            console.error(`[SYNC REPAIR] Erreur réparation signalement ${orphan.id}:`, repairErr.message);
+          }
+        }
+      }
+
       const batch = db.batch();
       let batchCount = 0;
       const BATCH_LIMIT = 500; // Limite Firestore
+      const notificationsToSend = []; // Notifications à envoyer après le commit
 
       for (const row of pgResult.rows) {
         try {
@@ -230,8 +260,41 @@ class SyncService {
 
           let docRef;
           if (row.firebase_id) {
-            // Mettre à jour le document existant
+            // Vérifier si le statut a changé pour envoyer une notification
             docRef = db.collection(SIGNALEMENTS_COLLECTION).doc(row.firebase_id);
+            try {
+              const existingDoc = await docRef.get();
+              if (existingDoc.exists) {
+                const oldData = existingDoc.data();
+                const oldStatutCode = oldData.statut_code || oldData.statut?.code || 'NOUVEAU';
+                const newStatutCode = row.statut_code || 'NOUVEAU';
+                
+                // Fallback: si PostgreSQL n'a pas l'email, chercher dans le doc Firestore
+                let emailForNotif = row.utilisateur_email;
+                if (!emailForNotif) {
+                  emailForNotif = oldData.utilisateur_email || (oldData.utilisateur && oldData.utilisateur.email) || null;
+                  if (emailForNotif) {
+                    console.log(`[SYNC NOTIF] Fallback email depuis Firestore: ${emailForNotif}`);
+                  }
+                }
+                
+                console.log(`[SYNC NOTIF] Signalement ${row.id} "${row.titre}": statut ${oldStatutCode} → ${newStatutCode} (email: ${emailForNotif || 'AUCUN'})`);
+                
+                if (oldStatutCode !== newStatutCode && newStatutCode !== 'NOUVEAU' && emailForNotif) {
+                  console.log(`[SYNC NOTIF] ✅ Changement de statut détecté, notification prévue pour ${emailForNotif}`);
+                  notificationsToSend.push({
+                    email: emailForNotif,
+                    signalement: { id: row.id, titre: row.titre },
+                    newStatutCode: newStatutCode,
+                    entreprise: row.entreprise || null
+                  });
+                }
+              }
+            } catch (checkErr) {
+              console.error(`[SYNC NOTIF] Erreur vérification statut:`, checkErr.message);
+            }
+
+            // Mettre à jour le document existant
             batch.set(docRef, firestoreData, { merge: true });
             results.updated++;
             results.details.push({
@@ -278,6 +341,23 @@ class SyncService {
       // Commit final si des documents restants
       if (batchCount > 0) {
         await batch.commit();
+      }
+
+      // Envoyer les notifications après le commit
+      console.log(`[SYNC NOTIF] ${notificationsToSend.length} notification(s) à envoyer`);
+      for (const notif of notificationsToSend) {
+        try {
+          console.log(`[SYNC NOTIF] Envoi notification à ${notif.email} pour signalement "${notif.signalement.titre}" → ${notif.newStatutCode}`);
+          const notifResult = await NotificationService.notifyStatusChange(
+            notif.email,
+            notif.signalement,
+            notif.newStatutCode,
+            notif.entreprise
+          );
+          console.log(`[SYNC NOTIF] Résultat:`, JSON.stringify(notifResult));
+        } catch (notifError) {
+          console.error(`[SYNC NOTIF] ❌ Erreur envoi notification:`, notifError.message);
+        }
       }
 
       // Mettre à jour les métadonnées de synchronisation
@@ -396,9 +476,9 @@ class SyncService {
             const nom = nameParts.slice(1).join(' ') || '';
 
             await pool.query(`
-              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, firebase_uid, tentatives, bloque)
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseUid, firebaseTentatives, firebaseBloque]);
+              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, tentatives, bloque)
+              VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseTentatives, firebaseBloque]);
 
             results.imported++;
             results.details.push({
@@ -415,9 +495,9 @@ class SyncService {
             if (existingUser.tentatives !== firebaseTentatives || existingUser.bloque !== firebaseBloque) {
               await pool.query(`
                 UPDATE utilisateur 
-                SET tentatives = $1, bloque = $2, firebase_uid = COALESCE(firebase_uid, $3)
-                WHERE id = $4
-              `, [firebaseTentatives, firebaseBloque, firebaseUid, existingUser.id]);
+                SET tentatives = $1, bloque = $2
+                WHERE id = $3
+              `, [firebaseTentatives, firebaseBloque, existingUser.id]);
 
               results.updated++;
               results.details.push({
@@ -471,20 +551,15 @@ class SyncService {
 
       for (const user of pgUsers.rows) {
         try {
-          // Déterminer l'ID du document Firebase
-          let docId = user.firebase_uid;
-          
-          if (!docId) {
-            // Créer un nouvel ID pour cet utilisateur
-            docId = `pg_${user.id}`;
-          }
+          // Déterminer l'ID du document Firebase - utiliser pg_id comme fallback
+          const docId = `pg_${user.id}`;
 
           const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
           
           // Envoyer les données PostgreSQL vers Firebase (source de vérité = PostgreSQL)
+          // NE PAS envoyer le mot de passe vers Firestore
           await userDocRef.set({
             email: user.email,
-            password: user.mot_de_passe,
             displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
             nom: user.nom || '',
             prenom: user.prenom || '',
@@ -497,16 +572,7 @@ class SyncService {
             lastSyncAt: new Date().toISOString()
           }, { merge: true });
 
-          // Mettre à jour le firebase_uid si c'était un nouvel utilisateur
-          if (!user.firebase_uid) {
-            await pool.query(
-              'UPDATE utilisateur SET firebase_uid = $1 WHERE id = $2',
-              [docId, user.id]
-            );
-            results.exported++;
-          } else {
-            results.updated++;
-          }
+          results.exported++;
 
           results.details.push({
             action: user.firebase_uid ? 'updated' : 'exported',
@@ -552,15 +618,15 @@ class SyncService {
     try {
       // Récupérer tous les utilisateurs depuis PostgreSQL
       const pgUsers = await pool.query(`
-        SELECT email, nom, prenom, firebase_uid, tentatives, bloque, created_at
+        SELECT email, nom, prenom, tentatives, bloque, created_at
         FROM utilisateur 
         WHERE email IS NOT NULL AND email != ''
       `);
 
       for (const user of pgUsers.rows) {
         try {
-          // Utiliser l'UID Firebase s'il existe, sinon générer un ID basé sur l'email
-          const uid = user.firebase_uid || user.email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+          // Générer un ID basé sur l'email
+          const uid = user.email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
           
           const userDocRef = db.collection(USERS_COLLECTION).doc(uid);
           const userDoc = await userDocRef.get();
@@ -622,8 +688,8 @@ class SyncService {
       const roleId = roleResult.rows[0]?.id || 2;
 
       const insertResult = await pool.query(`
-        INSERT INTO utilisateur (email, nom, prenom, id_role, password)
-        VALUES ($1, $2, $3, $4, 'firebase_user')
+        INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
+        VALUES ($1, 'firebase_user', $2, $3, $4)
         ON CONFLICT (email) DO UPDATE SET nom = EXCLUDED.nom
         RETURNING id
       `, [
@@ -645,8 +711,12 @@ class SyncService {
    * Mapper les données Firestore vers le format PostgreSQL
    */
   static async mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises) {
-    // Récupérer l'ID de l'utilisateur
-    const idUtilisateur = await this.findOrCreateUser(firestoreData.utilisateur);
+    // Récupérer l'ID de l'utilisateur - essayer utilisateur objet puis utilisateur_email
+    let utilisateurObj = firestoreData.utilisateur;
+    if (!utilisateurObj && firestoreData.utilisateur_email) {
+      utilisateurObj = { email: firestoreData.utilisateur_email };
+    }
+    const idUtilisateur = await this.findOrCreateUser(utilisateurObj);
     
     // Récupérer l'ID de l'entreprise si présente
     let idEntreprise = null;
