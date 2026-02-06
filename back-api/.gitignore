@@ -22,3 +22,8 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Service account Firebase (ne pas committer)
+config/firebase-service-account.json
+# règle plus générale pour fichiers secrets JSON dans config/
+**/config/*service-account*.json
