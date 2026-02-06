@@ -259,16 +259,6 @@ function MainApp() {
               📊 Récapitulatif
             </button>
           </div>
-          {/* Bouton Synchroniser visible uniquement pour le Manager */}
-          {isManager && (
-            <button className="refresh-btn" onClick={() => { 
-              fetchSignalements(); 
-              fetchStats(); 
-              fetchStatistiquesTraitement();
-            }}>
-              🔄 Synchroniser
-            </button>
-          )}
         </div>
       </header>
       
