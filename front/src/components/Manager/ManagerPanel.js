@@ -19,6 +19,7 @@ const ManagerPanel = ({ onClose }) => {
   const [lastSyncInfo, setLastSyncInfo] = useState(null);
   const [firebaseAvailable, setFirebaseAvailable] = useState(false);
   const [showCreateUser, setShowCreateUser] = useState(false);
+  const [viewingSignalement, setViewingSignalement] = useState(null);
   const [newUser, setNewUser] = useState({
     email: '',
     mot_de_passe: '',
@@ -626,9 +627,6 @@ const ManagerPanel = ({ onClose }) => {
                     <tr>
                       <th>Titre</th>
                       <th>Statut</th>
-                      <th>Surface (m²)</th>
-                      <th>Budget</th>
-                      <th>Entreprise</th>
                       <th>Date</th>
                       <th>Actions</th>
                     </tr>
@@ -645,11 +643,14 @@ const ManagerPanel = ({ onClose }) => {
                             {sig.statut || 'N/A'}
                           </span>
                         </td>
-                        <td>{sig.surface_m2 || '-'}</td>
-                        <td>{sig.budget ? `${sig.budget.toLocaleString()} MGA` : '-'}</td>
-                        <td>{sig.entreprise || '-'}</td>
                         <td>{formatDate(sig.date_signalement)}</td>
-                        <td>
+                        <td className="actions-cell">
+                          <button 
+                            className="action-btn view"
+                            onClick={() => setViewingSignalement(sig)}
+                          >
+                            👁️ Détails
+                          </button>
                           <button 
                             className="action-btn edit"
                             onClick={() => setEditingSignalement(sig)}
@@ -780,6 +781,20 @@ const ManagerPanel = ({ onClose }) => {
           )}
         </div>
 
+        {/* Modal de visualisation des détails */}
+        {viewingSignalement && (
+          <DetailSignalementModal
+            signalement={viewingSignalement}
+            getStatusColor={getStatusColor}
+            formatDate={formatDate}
+            onClose={() => setViewingSignalement(null)}
+            onEdit={(sig) => {
+              setViewingSignalement(null);
+              setEditingSignalement(sig);
+            }}
+          />
+        )}
+
         {/* Modal d'édition de signalement */}
         {editingSignalement && (
           <EditSignalementModal
@@ -791,6 +806,112 @@ const ManagerPanel = ({ onClose }) => {
             loading={loading}
           />
         )}
+      </div>
+    </div>
+  );
+};
+
+// Composant Modal de visualisation des détails
+const DetailSignalementModal = ({ signalement, getStatusColor, formatDate, onClose, onEdit }) => {
+  const formatCurrency = (amount) => {
+    if (!amount) return 'N/A';
+    return new Intl.NumberFormat('fr-FR', {
+      style: 'currency',
+      currency: 'MGA',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="detail-modal">
+        <div className="modal-header">
+          <h3>📋 Détails du signalement</h3>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
+        
+        {/* Galerie de photos */}
+        {signalement.photos && signalement.photos.length > 0 ? (
+          <div className="photos-gallery detail-photos">
+            <h4>📷 Photos ({signalement.photos.length})</h4>
+            <div className="photos-grid">
+              {signalement.photos.map((photo, idx) => (
+                <div key={photo.id || idx} className="photo-item">
+                  <img 
+                    src={photo.url}
+                    alt={photo.nom_fichier || `Photo ${idx + 1}`}
+                    onClick={() => window.open(photo.url, '_blank')}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="photos-gallery no-photos">
+            <p>📷 Aucune photo disponible</p>
+          </div>
+        )}
+        
+        <div className="detail-content">
+          <div className="detail-header">
+            <h2>{signalement.titre || 'Sans titre'}</h2>
+            <span 
+              className="status-badge large"
+              style={{ background: getStatusColor(signalement.statut_code) }}
+            >
+              {signalement.statut || 'N/A'}
+            </span>
+          </div>
+          
+          {signalement.description && (
+            <div className="detail-description">
+              <p>{signalement.description}</p>
+            </div>
+          )}
+          
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="detail-label">📅 Date de signalement</span>
+              <span className="detail-value">{formatDate(signalement.date_signalement)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">📐 Surface</span>
+              <span className="detail-value">{signalement.surface_m2 ? `${signalement.surface_m2} m²` : 'N/A'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">💰 Budget</span>
+              <span className="detail-value">{formatCurrency(signalement.budget)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">🏢 Entreprise</span>
+              <span className="detail-value">{signalement.entreprise || 'Non assignée'}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">📍 Coordonnées</span>
+              <span className="detail-value">{signalement.latitude?.toFixed(6)}, {signalement.longitude?.toFixed(6)}</span>
+            </div>
+            <div className="detail-item">
+              <span className="detail-label">📊 Avancement</span>
+              <span className="detail-value">{signalement.pourcentage_completion || 0}%</span>
+            </div>
+          </div>
+          
+          {signalement.signale_par && (
+            <div className="detail-author">
+              <span className="detail-label">👤 Signalé par</span>
+              <span className="detail-value">{signalement.utilisateur_prenom} {signalement.utilisateur_nom} ({signalement.signale_par})</span>
+            </div>
+          )}
+        </div>
+        
+        <div className="modal-actions">
+          <button type="button" className="cancel-btn" onClick={onClose}>
+            Fermer
+          </button>
+          <button type="button" className="save-btn" onClick={() => onEdit(signalement)}>
+            ✏️ Modifier
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -842,6 +963,25 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
           <h3>✏️ Modifier le signalement</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
+        
+        {/* Galerie de photos */}
+        {signalement.photos && signalement.photos.length > 0 && (
+          <div className="photos-gallery">
+            <h4>📷 Photos ({signalement.photos.length})</h4>
+            <div className="photos-grid">
+              {signalement.photos.map((photo, idx) => (
+                <div key={photo.id || idx} className="photo-item">
+                  <img 
+                    src={photo.url}
+                    alt={photo.nom_fichier || `Photo ${idx + 1}`}
+                    onClick={() => window.open(photo.url, '_blank')}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label>Titre</label>

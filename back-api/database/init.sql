@@ -10,5 +10,8 @@
 -- Migration pour la synchronisation
 \i /docker-entrypoint-initdb.d/migration_sync.sql
 
+-- Table des photos de signalement
+\i /docker-entrypoint-initdb.d/script_03022026_photo.sql
+
 -- Vue pour les statistiques de traitement (dashboard)
 \i /docker-entrypoint-initdb.d/vue_dashboard_traitement.sql

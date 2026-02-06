@@ -126,13 +126,57 @@ const MapComponent = ({
               </div>
             </Tooltip>
             <Popup>
-              <div style={{ minWidth: '220px' }}>
+              <div style={{ minWidth: '220px', maxWidth: '300px' }}>
                 <h3 style={{ margin: '0 0 10px 0', color: '#1a1a2e' }}>
                   🚧 {signalement.titre || 'Signalement'}
                 </h3>
                 <p style={{ margin: '0 0 10px 0', color: '#666', fontSize: '13px' }}>
                   {signalement.description || 'Aucune description'}
                 </p>
+                
+                {/* Affichage des photos */}
+                {signalement.photos && signalement.photos.length > 0 && (
+                  <div style={{ 
+                    marginBottom: '10px',
+                    display: 'flex',
+                    gap: '5px',
+                    overflowX: 'auto',
+                    paddingBottom: '5px'
+                  }}>
+                    {signalement.photos.slice(0, 3).map((photo, idx) => (
+                      <img 
+                        key={photo.id || idx}
+                        src={photo.url}
+                        alt={photo.nom_fichier || `Photo ${idx + 1}`}
+                        style={{
+                          width: '80px',
+                          height: '60px',
+                          objectFit: 'cover',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          border: '1px solid #ddd'
+                        }}
+                        onClick={() => window.open(photo.url, '_blank')}
+                      />
+                    ))}
+                    {signalement.photos.length > 3 && (
+                      <div style={{
+                        width: '80px',
+                        height: '60px',
+                        background: '#f0f0f0',
+                        borderRadius: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '12px',
+                        color: '#666'
+                      }}>
+                        +{signalement.photos.length - 3}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div style={{ 
                   background: '#f5f5f5', 
                   padding: '10px', 

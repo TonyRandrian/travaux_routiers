@@ -30,7 +30,20 @@ router.get('/', async (req, res) => {
         e.contact as entreprise_contact,
         u.email as signale_par,
         u.nom as utilisateur_nom,
-        u.prenom as utilisateur_prenom
+        u.prenom as utilisateur_prenom,
+        COALESCE(
+          (SELECT json_agg(
+            json_build_object(
+              'id', p.id,
+              'url', p.url,
+              'nom_fichier', p.nom_fichier,
+              'ordre', p.ordre
+            ) ORDER BY p.ordre
+          )
+          FROM photo_signalement p
+          WHERE p.id_signalement = s.id
+          ), '[]'
+        ) as photos
       FROM signalement s
       LEFT JOIN statut_signalement ss ON s.id_statut_signalement = ss.id
       LEFT JOIN entreprise e ON s.id_entreprise = e.id
