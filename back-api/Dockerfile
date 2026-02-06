@@ -4,7 +4,11 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install
+# Force installation of devDependencies for development
+RUN npm install --include=dev
+
+# Install nodemon globally as fallback
+RUN npm install -g nodemon
 
 COPY . .
 
