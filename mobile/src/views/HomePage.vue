@@ -67,7 +67,7 @@
       </div>
 
       <!-- Progress Ring -->
-      <div class="progress-section glass">
+      <!-- <div class="progress-section glass">
         <div class="progress-ring-container">
           <svg class="progress-ring" viewBox="0 0 120 120">
             <circle class="progress-bg" cx="60" cy="60" r="52" />
@@ -101,7 +101,7 @@
             </div>
           </div>
         </div>
-      </div>
+      </div> -->
 
       <!-- Quick Actions -->
       <div class="actions-section">
