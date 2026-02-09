@@ -95,12 +95,12 @@
               <span class="detail-label">🏢 Entreprise</span>
               <span class="detail-value">{{ selectedSignalement.entreprise?.nom || 'Non assignée' }}</span>
             </div>
-            <div class="detail-item full-width">
+            <!-- <div class="detail-item full-width">
               <span class="detail-label">📍 Coordonnées</span>
               <span class="detail-value coords">
                 {{ selectedSignalement.latitude?.toFixed(6) }}, {{ selectedSignalement.longitude?.toFixed(6) }}
               </span>
-            </div>
+            </div> -->
           </div>
         </div>
       </ion-content>
