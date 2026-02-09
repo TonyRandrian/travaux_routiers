@@ -11,6 +11,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'fireb
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
 import { fcmService } from '@/services/fcmService';
+import { useReferentielsStore } from '@/stores/referentiels';
 
 const MAX_TENTATIVES = 3;
 
@@ -41,6 +42,14 @@ export const useAuthStore = defineStore('auth', () => {
       currentUser.value = user;
       if (user) {
         await fetchUserProfile(user.uid);
+        
+        // Charger les référentiels (statuts, entreprises) maintenant que l'utilisateur est authentifié
+        try {
+          const referentielsStore = useReferentielsStore();
+          referentielsStore.loadAll();
+        } catch (err) {
+          console.error('Erreur chargement référentiels:', err);
+        }
         
         // Sauvegarder le token FCM - getToken() attend la fin de initialize()
         console.log('onAuthStateChanged: Tentative sauvegarde token FCM...');
