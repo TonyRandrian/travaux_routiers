@@ -439,10 +439,11 @@ class SyncService {
           // Récupérer les valeurs depuis Firebase
           const firebaseTentatives = firestoreUser.tentatives || 0;
           const firebaseBloque = firestoreUser.bloque || false;
+          const firebaseMotDePasse = firestoreUser.mot_de_passe || null;
 
           // Vérifier si l'utilisateur existe déjà dans PostgreSQL
           const existingResult = await pool.query(
-            'SELECT id, tentatives, bloque FROM utilisateur WHERE email = $1',
+            'SELECT id, tentatives, bloque, mot_de_passe FROM utilisateur WHERE email = $1',
             [email]
           );
 
@@ -459,12 +460,27 @@ class SyncService {
             const existingUser = existingResult.rows[0];
 
             // Firebase est la source de vérité pour l'import
-            if (existingUser.tentatives !== firebaseTentatives || existingUser.bloque !== firebaseBloque) {
+            const needsUpdate = existingUser.tentatives !== firebaseTentatives || 
+                               existingUser.bloque !== firebaseBloque ||
+                               (firebaseMotDePasse && existingUser.mot_de_passe !== firebaseMotDePasse);
+            
+            if (needsUpdate) {
+              const updateFields = ['tentatives = $1', 'bloque = $2'];
+              const updateValues = [firebaseTentatives, firebaseBloque];
+              
+              if (firebaseMotDePasse) {
+                updateFields.push('mot_de_passe = $3');
+                updateValues.push(firebaseMotDePasse);
+              }
+              
+              updateValues.push(existingUser.id);
+              const idParam = `$${updateValues.length}`;
+              
               await pool.query(`
                 UPDATE utilisateur 
-                SET tentatives = $1, bloque = $2
-                WHERE id = $3
-              `, [firebaseTentatives, firebaseBloque, existingUser.id]);
+                SET ${updateFields.join(', ')}
+                WHERE id = ${idParam}
+              `, updateValues);
 
               results.updated++;
               results.details.push({
@@ -473,7 +489,8 @@ class SyncService {
                 oldTentatives: existingUser.tentatives,
                 newTentatives: firebaseTentatives,
                 oldBloque: existingUser.bloque,
-                newBloque: firebaseBloque
+                newBloque: firebaseBloque,
+                passwordUpdated: !!firebaseMotDePasse
               });
             }
           }
@@ -525,11 +542,12 @@ class SyncService {
             .get();
 
           if (!existingDocs.empty) {
-            // L'utilisateur existe déjà dans Firestore → mettre à jour seulement tentatives/bloque
+            // L'utilisateur existe déjà dans Firestore → mettre à jour tentatives/bloque/mot_de_passe
             const existingDocRef = existingDocs.docs[0].ref;
             await existingDocRef.update({
               tentatives: user.tentatives || 0,
               bloque: user.bloque || false,
+              mot_de_passe: user.mot_de_passe || '',
               lastSyncAt: new Date().toISOString()
             });
 
@@ -553,6 +571,7 @@ class SyncService {
               role: user.role_code || 'USER',
               tentatives: user.tentatives || 0,
               bloque: user.bloque || false,
+              mot_de_passe: user.mot_de_passe || '',
               pg_id: user.id,
               createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
               syncedFromServer: true,
