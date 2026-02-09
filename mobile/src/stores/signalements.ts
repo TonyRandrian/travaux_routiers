@@ -48,8 +48,16 @@ function normalizeSignalement(doc: any): Signalement {
     entreprise = referentielsStore.getEntrepriseById(data.id_entreprise);
   }
 
-  // Normaliser les photos
-  const photos: PhotoSignalement[] = Array.isArray(data.photos) ? data.photos : [];
+  // Normaliser les photos (supporte tableau ou map d'objets venant de Firestore)
+  let photos: PhotoSignalement[] = [];
+  if (Array.isArray(data.photos)) {
+    photos = data.photos;
+  } else if (data.photos && typeof data.photos === 'object') {
+    photos = Object.keys(data.photos)
+      .map(k => data.photos[k])
+      .filter(Boolean)
+      .sort((a: any, b: any) => (a.ordre ?? 0) - (b.ordre ?? 0));
+  }
   
   return {
     id: doc.id || data.id,

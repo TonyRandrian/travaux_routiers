@@ -126,7 +126,7 @@
 
         <!-- Section Photos -->
         <div class="sheet-photos">
-          <h4>📷 Photos ({{ selectedSignalement.photos?.length || 2 }})</h4>
+          <h4>📷 Photos ({{ selectedSignalement.photos?.length ?? 0 }})</h4>
           <div class="photos-scroll">
             <!-- Photos du signalement -->
             <template v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0">
@@ -139,20 +139,12 @@
                 <img :src="photo.url" :alt="'Photo ' + (index + 1)" loading="lazy" />
               </div>
             </template>
-            <!-- Photos par défaut si pas de photos -->
+            <!-- Photo par défaut si pas de photos -->
             <template v-else>
               <div class="photo-thumbnail default-photo">
                 <img 
-                  src="https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?w=400&q=80" 
-                  alt="Photo par défaut - Route"
-                  loading="lazy"
-                />
-                <span class="default-badge">Par défaut</span>
-              </div>
-              <div class="photo-thumbnail default-photo">
-                <img 
-                  src="https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400&q=80" 
-                  alt="Photo par défaut - Travaux"
+                  :src="defaultPhoto"
+                  alt="Photo par défaut"
                   loading="lazy"
                 />
                 <span class="default-badge">Par défaut</span>
@@ -260,6 +252,7 @@ import {
 import { Geolocation } from '@capacitor/geolocation';
 import { LMap, LTileLayer, LMarker, LCircleMarker, LPopup } from '@vue-leaflet/vue-leaflet';
 import 'leaflet/dist/leaflet.css';
+import defaultPhoto from '@/assets/default-photo.svg';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
 import { useReferentielsStore } from '@/stores/referentiels';

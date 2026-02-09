@@ -35,7 +35,10 @@
           @click="openDetail(signalement)"
           detail
         >
-          <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut?.code) }" slot="start"></div>
+          <div class="item-start" slot="start">
+            <img :src="(signalement.photos && signalement.photos.length > 0) ? signalement.photos[0].url : defaultPhoto" alt="Vignette" class="item-thumb" />
+            <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut?.code) }"></div>
+          </div>
           <ion-label>
             <h2>{{ signalement.titre || 'Sans titre' }}</h2>
             <p>{{ signalement.description || 'Aucune description' }}</p>
@@ -95,13 +98,54 @@
               <span class="detail-label">🏢 Entreprise</span>
               <span class="detail-value">{{ selectedSignalement.entreprise?.nom || 'Non assignée' }}</span>
             </div>
-            <div class="detail-item full-width">
+            <!-- <div class="detail-item full-width">
               <span class="detail-label">📍 Coordonnées</span>
               <span class="detail-value coords">
                 {{ selectedSignalement.latitude?.toFixed(6) }}, {{ selectedSignalement.longitude?.toFixed(6) }}
               </span>
+            </div> -->
+          </div>
+          <!-- Photos -->
+          <div class="sheet-photos">
+            <h4>📷 Photos ({{ selectedSignalement.photos?.length ?? 0 }})</h4>
+            <div class="photos-grid">
+              <template v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0">
+                <div v-for="(photo, idx) in selectedSignalement.photos" :key="photo.id || idx" class="photo-thumb-card" @click="openPhotoViewer(idx)">
+                  <img :src="photo.url" :alt="'Photo ' + (idx + 1)" loading="lazy" />
+                </div>
+              </template>
+              <template v-else>
+                <div class="photo-thumb-card default-photo">
+                  <img :src="defaultPhoto" alt="Photo par défaut" />
+                  <span class="default-badge">Par défaut</span>
+                </div>
+              </template>
             </div>
           </div>
+        </div>
+      </ion-content>
+    </ion-modal>
+
+    <!-- Photo Viewer Modal -->
+    <ion-modal :is-open="showPhotoViewer" @did-dismiss="closePhotoViewer" class="photo-viewer-modal">
+      <ion-header>
+        <ion-toolbar color="dark">
+          <ion-title>Photos</ion-title>
+          <ion-buttons slot="end">
+            <ion-button @click="closePhotoViewer">Fermer</ion-button>
+          </ion-buttons>
+        </ion-toolbar>
+      </ion-header>
+      <ion-content class="ion-padding photo-viewer" v-if="selectedSignalement?.photos && selectedSignalement.photos.length > 0">
+        <div class="photo-viewer-header">
+          <span>{{ currentPhotoIndex + 1 }} / {{ selectedSignalement.photos.length }}</span>
+        </div>
+        <div class="photo-viewer-content">
+          <img :src="selectedSignalement.photos[currentPhotoIndex]?.url" :alt="'Photo ' + (currentPhotoIndex + 1)" />
+        </div>
+        <div class="photo-viewer-nav" v-if="selectedSignalement.photos.length > 1">
+          <ion-button fill="clear" :disabled="currentPhotoIndex === 0" @click="prevPhoto"><ion-icon :icon="chevronBackOutline"></ion-icon></ion-button>
+          <ion-button fill="clear" :disabled="currentPhotoIndex >= selectedSignalement.photos.length - 1" @click="nextPhoto"><ion-icon :icon="chevronForwardOutline"></ion-icon></ion-button>
         </div>
       </ion-content>
     </ion-modal>
@@ -129,10 +173,11 @@ import {
   IonSpinner,
   IonModal
 } from '@ionic/vue';
-import { add } from 'ionicons/icons';
+import { add, chevronBackOutline, chevronForwardOutline } from 'ionicons/icons';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
 import { useReferentielsStore } from '@/stores/referentiels';
+import defaultPhoto from '@/assets/default-photo.svg';
 import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
@@ -143,6 +188,8 @@ const referentielsStore = useReferentielsStore();
 const loading = computed(() => signalementsStore.loading);
 const showDetail = ref(false);
 const selectedSignalement = ref<Signalement | null>(null);
+const showPhotoViewer = ref(false);
+const currentPhotoIndex = ref(0);
 
 const mySignalements = computed(() => {
   if (!authStore.currentUser) return [];
@@ -176,6 +223,23 @@ function closeDetail() {
   showDetail.value = false;
   selectedSignalement.value = null;
 }
+
+function openPhotoViewer(index: number) {
+  currentPhotoIndex.value = index;
+  showPhotoViewer.value = true;
+}
+
+function closePhotoViewer() {
+  showPhotoViewer.value = false;
+}
+
+function prevPhoto() {
+  if (currentPhotoIndex.value > 0) currentPhotoIndex.value--;
+}
+
+function nextPhoto() {
+  if (selectedSignalement.value?.photos && currentPhotoIndex.value < selectedSignalement.value.photos.length - 1) currentPhotoIndex.value++;
+} 
 
 function getStatusColor(statutCode: string | undefined): string {
   return referentielsStore.getColorByCode(statutCode);
@@ -345,6 +409,21 @@ ion-fab-button {
   color: #666;
 }
 
+/* Thumbnail for list */
+.item-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(0,0,0,0.06);
+}
+
 .detail-value {
   font-size: 16px;
   font-weight: 600;
@@ -362,5 +441,105 @@ ion-fab-button {
   border-radius: 20px;
   color: white;
   font-size: 13px;
+}
+
+/* Photos Section (list detail) */
+.sheet-photos {
+  margin-top: 20px;
+}
+.photos-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+.photo-thumbnail {
+  flex-shrink: 0;
+  width: 120px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid rgba(0,0,0,0.06);
+}
+.photo-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-thumbnail.default-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+}
+
+/* New thumbnail grid (2 columns) */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.photo-thumb-card {
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  cursor: pointer;
+  background: #f6f7f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-thumb-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-thumb-card.default-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  filter: grayscale(10%);
+}
+.photo-viewer {
+  background: #000;
+  height: 100%;
+}
+.photo-viewer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: rgba(0,0,0,0.85);
+  color: white;
+}
+.photo-viewer-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.photo-viewer-content img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.photo-viewer-nav {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  padding: 12px;
+}
+.photo-viewer-nav ion-button {
+  --color: white;
+}
+.photo-viewer-nav ion-button:disabled {
+  --color: rgba(255,255,255,0.3);
 }
 </style>
