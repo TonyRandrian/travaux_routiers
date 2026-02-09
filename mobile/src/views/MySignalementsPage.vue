@@ -35,7 +35,10 @@
           @click="openDetail(signalement)"
           detail
         >
-          <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut?.code) }" slot="start"></div>
+          <div class="item-start" slot="start">
+            <img :src="(signalement.photos && signalement.photos.length > 0) ? signalement.photos[0].url : defaultPhoto" alt="Vignette" class="item-thumb" />
+            <div class="status-indicator" :style="{ background: getStatusColor(signalement.statut?.code) }"></div>
+          </div>
           <ion-label>
             <h2>{{ signalement.titre || 'Sans titre' }}</h2>
             <p>{{ signalement.description || 'Aucune description' }}</p>
@@ -133,6 +136,7 @@ import { add } from 'ionicons/icons';
 import { useSignalementsStore } from '@/stores/signalements';
 import { useAuthStore } from '@/stores/auth';
 import { useReferentielsStore } from '@/stores/referentiels';
+import defaultPhoto from '@/assets/default-photo.svg';
 import type { Signalement, StatutCode } from '@/types';
 
 const router = useRouter();
@@ -343,6 +347,21 @@ ion-fab-button {
 .detail-label {
   font-size: 12px;
   color: #666;
+}
+
+/* Thumbnail for list */
+.item-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.item-thumb {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 2px solid rgba(0,0,0,0.06);
 }
 
 .detail-value {
