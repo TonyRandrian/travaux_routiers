@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+const { getFirestore, getAuth, isFirebaseAvailable } = require('../config/firebase');
 const NotificationService = require('./notificationService');
 
 // Collection Firestore pour les signalements
@@ -511,6 +511,7 @@ class SyncService {
   /**
    * EXPORTER les utilisateurs depuis PostgreSQL vers Firebase
    * Direction: PostgreSQL → Firebase (unidirectionnel)
+   * Crée aussi les comptes Firebase Authentication
    */
   static async exportUsersToFirestore() {
     if (!this.isAvailable()) {
@@ -518,9 +519,11 @@ class SyncService {
     }
 
     const db = getFirestore();
+    const auth = getAuth();
     const results = {
       exported: 0,
       updated: 0,
+      authCreated: 0,
       errors: [],
       details: []
     };
@@ -535,6 +538,38 @@ class SyncService {
 
       for (const user of pgUsers.rows) {
         try {
+          // 1. Créer/vérifier le compte Firebase Auth
+          let firebaseAuthUid = null;
+          if (auth && user.mot_de_passe) {
+            try {
+              // Vérifier si l'utilisateur existe déjà dans Firebase Auth
+              const existingAuthUser = await auth.getUserByEmail(user.email);
+              firebaseAuthUid = existingAuthUser.uid;
+              
+              // Mettre à jour le mot de passe si différent
+              await auth.updateUser(existingAuthUser.uid, {
+                password: user.mot_de_passe,
+                displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email
+              });
+            } catch (authError) {
+              // L'utilisateur n'existe pas dans Firebase Auth → le créer
+              if (authError.code === 'auth/user-not-found') {
+                const newAuthUser = await auth.createUser({
+                  email: user.email,
+                  password: user.mot_de_passe,
+                  displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+                  disabled: user.bloque || false
+                });
+                firebaseAuthUid = newAuthUser.uid;
+                results.authCreated++;
+                console.log(`✓ Compte Firebase Auth créé pour: ${user.email}`);
+              } else {
+                console.error(`Erreur Firebase Auth pour ${user.email}:`, authError.message);
+              }
+            }
+          }
+
+          // 2. Gérer le document Firestore
           // Chercher d'abord si un document Firestore existe déjà pour cet email
           // (évite les doublons si le doc a été créé par le mobile avec un autre ID)
           const existingDocs = await db.collection(USERS_COLLECTION)
@@ -544,26 +579,33 @@ class SyncService {
           if (!existingDocs.empty) {
             // L'utilisateur existe déjà dans Firestore → mettre à jour tentatives/bloque/mot_de_passe
             const existingDocRef = existingDocs.docs[0].ref;
-            await existingDocRef.update({
+            const updateData = {
               tentatives: user.tentatives || 0,
               bloque: user.bloque || false,
               mot_de_passe: user.mot_de_passe || '',
               lastSyncAt: new Date().toISOString()
-            });
+            };
+            if (firebaseAuthUid) {
+              updateData.uid = firebaseAuthUid;
+            }
+            await existingDocRef.update(updateData);
 
             results.updated++;
             results.details.push({
               action: 'updated',
               email: user.email,
               tentatives: user.tentatives || 0,
-              bloque: user.bloque || false
+              bloque: user.bloque || false,
+              authUid: firebaseAuthUid || null
             });
           } else {
             // Créer un nouveau document utilisateur dans Firestore
-            const docId = `pg_${user.id}`;
+            // Utiliser le UID Firebase Auth comme ID du document si disponible
+            const docId = firebaseAuthUid || `pg_${user.id}`;
             const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
             
             await userDocRef.set({
+              uid: firebaseAuthUid || docId,
               email: user.email,
               displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
               nom: user.nom || '',
@@ -583,7 +625,8 @@ class SyncService {
               action: 'exported',
               email: user.email,
               tentatives: user.tentatives || 0,
-              bloque: user.bloque || false
+              bloque: user.bloque || false,
+              authUid: firebaseAuthUid || null
             });
           }
         } catch (exportError) {
