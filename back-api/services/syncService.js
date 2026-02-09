@@ -1,5 +1,5 @@
 const pool = require('../config/database');
-const { getFirestore, isFirebaseAvailable } = require('../config/firebase');
+const { getFirestore, getAuth, isFirebaseAvailable } = require('../config/firebase');
 const NotificationService = require('./notificationService');
 
 // Collection Firestore pour les signalements
@@ -86,35 +86,13 @@ class SyncService {
           const pgData = await this.mapFirestoreToPostgres(firestoreData, firestoreId, statuts, entreprises);
 
           if (existingResult.rows.length > 0) {
-            // Le signalement existe déjà - mettre à jour l'utilisateur s'il est manquant
-            const existingId = existingResult.rows[0].id;
-            
-            // Vérifier si l'utilisateur est manquant
-            const checkUser = await pool.query(
-              'SELECT id_utilisateur FROM signalement WHERE id = $1',
-              [existingId]
-            );
-            
-            if (!checkUser.rows[0]?.id_utilisateur && pgData.id_utilisateur) {
-              // Mettre à jour avec l'utilisateur trouvé
-              await pool.query(
-                'UPDATE signalement SET id_utilisateur = $1 WHERE id = $2',
-                [pgData.id_utilisateur, existingId]
-              );
-              results.updated++;
-              results.details.push({
-                action: 'updated_user',
-                firebase_id: firestoreId,
-                pg_id: existingId,
-                id_utilisateur: pgData.id_utilisateur
-              });
-            } else {
-              results.details.push({
-                action: 'skipped',
-                firebase_id: firestoreId,
-                reason: 'Déjà synchronisé'
-              });
-            }
+            // Le signalement existe déjà - on ne modifie rien
+            // (le mobile ne peut que créer, pas modifier)
+            results.details.push({
+              action: 'skipped',
+              firebase_id: firestoreId,
+              reason: 'Déjà synchronisé'
+            });
           } else {
             // Créer un nouveau signalement
             const insertResult = await pool.query(`
@@ -170,11 +148,6 @@ class SyncService {
           });
         }
       }
-
-      // S'assurer que les documents utilisateurs existent dans Firestore
-      // (nécessaire pour pouvoir recevoir les tokens FCM depuis l'app mobile)
-      const userResults = await this.ensureUsersInFirestore();
-      console.log(`Documents utilisateurs créés dans Firestore: ${userResults.created}`);
 
       return results;
     } catch (error) {
@@ -254,7 +227,7 @@ class SyncService {
         }
       }
 
-      const batch = db.batch();
+      let batch = db.batch();
       let batchCount = 0;
       const BATCH_LIMIT = 500; // Limite Firestore
       const notificationsToSend = []; // Notifications à envoyer après le commit
@@ -334,6 +307,7 @@ class SyncService {
           // Commit par lots de 500 (limite Firestore)
           if (batchCount >= BATCH_LIMIT) {
             await batch.commit();
+            batch = db.batch(); // Créer un nouveau batch après commit
             batchCount = 0;
           }
         } catch (rowError) {
@@ -465,45 +439,48 @@ class SyncService {
           // Récupérer les valeurs depuis Firebase
           const firebaseTentatives = firestoreUser.tentatives || 0;
           const firebaseBloque = firestoreUser.bloque || false;
+          const firebaseMotDePasse = firestoreUser.mot_de_passe || null;
 
           // Vérifier si l'utilisateur existe déjà dans PostgreSQL
           const existingResult = await pool.query(
-            'SELECT id, tentatives, bloque FROM utilisateur WHERE email = $1',
+            'SELECT id, tentatives, bloque, mot_de_passe FROM utilisateur WHERE email = $1',
             [email]
           );
 
           if (existingResult.rows.length === 0) {
-            // Créer l'utilisateur dans PostgreSQL avec les données Firebase
-            const defaultPassword = 'firebase_user_' + firebaseUid.substring(0, 8);
-            
-            const displayName = firestoreUser.displayName || '';
-            const nameParts = displayName.split(' ');
-            const prenom = nameParts[0] || '';
-            const nom = nameParts.slice(1).join(' ') || '';
-
-            await pool.query(`
-              INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role, tentatives, bloque)
-              VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [email, defaultPassword, nom, prenom, defaultRoleId, firebaseTentatives, firebaseBloque]);
-
-            results.imported++;
+            // L'utilisateur n'existe pas dans PostgreSQL - on ne le crée pas
+            // (les utilisateurs ne sont créés que côté web)
             results.details.push({
-              action: 'imported',
+              action: 'skipped',
               email: email,
-              tentatives: firebaseTentatives,
-              bloque: firebaseBloque
+              reason: 'Utilisateur non existant côté web - création non autorisée depuis Firebase'
             });
           } else {
             // Mettre à jour l'utilisateur existant avec les données Firebase
             const existingUser = existingResult.rows[0];
 
             // Firebase est la source de vérité pour l'import
-            if (existingUser.tentatives !== firebaseTentatives || existingUser.bloque !== firebaseBloque) {
+            const needsUpdate = existingUser.tentatives !== firebaseTentatives || 
+                               existingUser.bloque !== firebaseBloque ||
+                               (firebaseMotDePasse && existingUser.mot_de_passe !== firebaseMotDePasse);
+            
+            if (needsUpdate) {
+              const updateFields = ['tentatives = $1', 'bloque = $2'];
+              const updateValues = [firebaseTentatives, firebaseBloque];
+              
+              if (firebaseMotDePasse) {
+                updateFields.push('mot_de_passe = $3');
+                updateValues.push(firebaseMotDePasse);
+              }
+              
+              updateValues.push(existingUser.id);
+              const idParam = `$${updateValues.length}`;
+              
               await pool.query(`
                 UPDATE utilisateur 
-                SET tentatives = $1, bloque = $2
-                WHERE id = $3
-              `, [firebaseTentatives, firebaseBloque, existingUser.id]);
+                SET ${updateFields.join(', ')}
+                WHERE id = ${idParam}
+              `, updateValues);
 
               results.updated++;
               results.details.push({
@@ -512,7 +489,8 @@ class SyncService {
                 oldTentatives: existingUser.tentatives,
                 newTentatives: firebaseTentatives,
                 oldBloque: existingUser.bloque,
-                newBloque: firebaseBloque
+                newBloque: firebaseBloque,
+                passwordUpdated: !!firebaseMotDePasse
               });
             }
           }
@@ -533,6 +511,7 @@ class SyncService {
   /**
    * EXPORTER les utilisateurs depuis PostgreSQL vers Firebase
    * Direction: PostgreSQL → Firebase (unidirectionnel)
+   * Crée aussi les comptes Firebase Authentication
    */
   static async exportUsersToFirestore() {
     if (!this.isAvailable()) {
@@ -540,9 +519,11 @@ class SyncService {
     }
 
     const db = getFirestore();
+    const auth = getAuth();
     const results = {
       exported: 0,
       updated: 0,
+      authCreated: 0,
       errors: [],
       details: []
     };
@@ -557,35 +538,97 @@ class SyncService {
 
       for (const user of pgUsers.rows) {
         try {
-          // Déterminer l'ID du document Firebase - utiliser pg_id comme fallback
-          const docId = `pg_${user.id}`;
+          // 1. Créer/vérifier le compte Firebase Auth
+          let firebaseAuthUid = null;
+          if (auth && user.mot_de_passe) {
+            try {
+              // Vérifier si l'utilisateur existe déjà dans Firebase Auth
+              const existingAuthUser = await auth.getUserByEmail(user.email);
+              firebaseAuthUid = existingAuthUser.uid;
+              
+              // Mettre à jour le mot de passe si différent
+              await auth.updateUser(existingAuthUser.uid, {
+                password: user.mot_de_passe,
+                displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email
+              });
+            } catch (authError) {
+              // L'utilisateur n'existe pas dans Firebase Auth → le créer
+              if (authError.code === 'auth/user-not-found') {
+                const newAuthUser = await auth.createUser({
+                  email: user.email,
+                  password: user.mot_de_passe,
+                  displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+                  disabled: user.bloque || false
+                });
+                firebaseAuthUid = newAuthUser.uid;
+                results.authCreated++;
+                console.log(`✓ Compte Firebase Auth créé pour: ${user.email}`);
+              } else {
+                console.error(`Erreur Firebase Auth pour ${user.email}:`, authError.message);
+              }
+            }
+          }
 
-          const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
-          
-          // Envoyer les données PostgreSQL vers Firebase (source de vérité = PostgreSQL)
-          // NE PAS envoyer le mot de passe vers Firestore
-          await userDocRef.set({
-            email: user.email,
-            displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
-            nom: user.nom || '',
-            prenom: user.prenom || '',
-            role: user.role_code || 'USER',
-            tentatives: user.tentatives || 0,
-            bloque: user.bloque || false,
-            pg_id: user.id,
-            createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
-            syncedFromServer: true,
-            lastSyncAt: new Date().toISOString()
-          }, { merge: true });
+          // 2. Gérer le document Firestore
+          // Chercher d'abord si un document Firestore existe déjà pour cet email
+          // (évite les doublons si le doc a été créé par le mobile avec un autre ID)
+          const existingDocs = await db.collection(USERS_COLLECTION)
+            .where('email', '==', user.email)
+            .get();
 
-          results.exported++;
+          if (!existingDocs.empty) {
+            // L'utilisateur existe déjà dans Firestore → mettre à jour tentatives/bloque/mot_de_passe
+            const existingDocRef = existingDocs.docs[0].ref;
+            const updateData = {
+              tentatives: user.tentatives || 0,
+              bloque: user.bloque || false,
+              mot_de_passe: user.mot_de_passe || '',
+              lastSyncAt: new Date().toISOString()
+            };
+            if (firebaseAuthUid) {
+              updateData.uid = firebaseAuthUid;
+            }
+            await existingDocRef.update(updateData);
 
-          results.details.push({
-            action: user.firebase_uid ? 'updated' : 'exported',
-            email: user.email,
-            tentatives: user.tentatives || 0,
-            bloque: user.bloque || false
-          });
+            results.updated++;
+            results.details.push({
+              action: 'updated',
+              email: user.email,
+              tentatives: user.tentatives || 0,
+              bloque: user.bloque || false,
+              authUid: firebaseAuthUid || null
+            });
+          } else {
+            // Créer un nouveau document utilisateur dans Firestore
+            // Utiliser le UID Firebase Auth comme ID du document si disponible
+            const docId = firebaseAuthUid || `pg_${user.id}`;
+            const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
+            
+            await userDocRef.set({
+              uid: firebaseAuthUid || docId,
+              email: user.email,
+              displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || user.email,
+              nom: user.nom || '',
+              prenom: user.prenom || '',
+              role: user.role_code || 'USER',
+              tentatives: user.tentatives || 0,
+              bloque: user.bloque || false,
+              mot_de_passe: user.mot_de_passe || '',
+              pg_id: user.id,
+              createdAt: user.created_at ? user.created_at.toISOString() : new Date().toISOString(),
+              syncedFromServer: true,
+              lastSyncAt: new Date().toISOString()
+            });
+
+            results.exported++;
+            results.details.push({
+              action: 'exported',
+              email: user.email,
+              tentatives: user.tentatives || 0,
+              bloque: user.bloque || false,
+              authUid: firebaseAuthUid || null
+            });
+          }
         } catch (exportError) {
           results.errors.push({
             email: user.email,
@@ -631,16 +674,17 @@ class SyncService {
 
       for (const user of pgUsers.rows) {
         try {
-          // Générer un ID basé sur l'email
-          const uid = user.email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
-          
-          const userDocRef = db.collection(USERS_COLLECTION).doc(uid);
-          const userDoc = await userDocRef.get();
+          // Vérifier si un document existe déjà pour cet email (éviter les doublons)
+          const existingDocs = await db.collection(USERS_COLLECTION)
+            .where('email', '==', user.email)
+            .get();
 
-          if (!userDoc.exists) {
-            // Créer le document utilisateur dans Firestore
+          if (existingDocs.empty) {
+            // Aucun document trouvé, créer avec pg_id comme identifiant
+            const docId = `pg_${user.email.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase()}`;
+            const userDocRef = db.collection(USERS_COLLECTION).doc(docId);
             await userDocRef.set({
-              uid,
+              uid: docId,
               email: user.email,
               displayName: `${user.prenom || ''} ${user.nom || ''}`.trim() || 'Utilisateur',
               role: 'user',
@@ -651,7 +695,7 @@ class SyncService {
             });
 
             results.created++;
-            console.log('Document utilisateur créé dans Firestore:', user.email, '->', uid);
+            console.log('Document utilisateur créé dans Firestore:', user.email, '->', docId);
           }
         } catch (userError) {
           results.errors.push({
@@ -669,7 +713,8 @@ class SyncService {
   }
 
   /**
-   * Trouver ou créer un utilisateur dans PostgreSQL à partir de l'email
+   * Trouver un utilisateur dans PostgreSQL à partir de l'email
+   * (ne crée pas l'utilisateur - la création se fait uniquement côté web)
    */
   static async findOrCreateUser(utilisateurData) {
     if (!utilisateurData || !utilisateurData.email) {
@@ -687,26 +732,10 @@ class SyncService {
         return existingUser.rows[0].id;
       }
 
-      // Créer l'utilisateur s'il n'existe pas (role = user par défaut)
-      const roleResult = await pool.query(
-        "SELECT id FROM role WHERE code = 'USER' LIMIT 1"
-      );
-      const roleId = roleResult.rows[0]?.id || 2;
-
-      const insertResult = await pool.query(`
-        INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role)
-        VALUES ($1, 'firebase_user', $2, $3, $4)
-        ON CONFLICT (email) DO UPDATE SET nom = EXCLUDED.nom
-        RETURNING id
-      `, [
-        utilisateurData.email,
-        utilisateurData.nom || 'Utilisateur',
-        utilisateurData.prenom || '',
-        roleId
-      ]);
-
-      console.log('Utilisateur créé/trouvé:', utilisateurData.email, '->', insertResult.rows[0]?.id);
-      return insertResult.rows[0]?.id || null;
+      // L'utilisateur n'existe pas dans PostgreSQL
+      // On ne le crée pas (la création se fait uniquement côté web)
+      console.log('Utilisateur non trouvé dans PostgreSQL:', utilisateurData.email, '(création non autorisée depuis Firebase)');
+      return null;
     } catch (error) {
       console.error('Erreur findOrCreateUser:', error);
       return null;

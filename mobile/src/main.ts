@@ -43,7 +43,6 @@ import './theme/variables.css';
 import 'leaflet/dist/leaflet.css';
 
 import { useAuthStore } from './stores/auth';
-import { useReferentielsStore } from './stores/referentiels';
 
 const pinia = createPinia();
 
@@ -53,12 +52,9 @@ const app = createApp(App)
   .use(router);
 
 // Initialiser l'écouteur d'authentification Firebase
+// Les référentiels (statuts, entreprises) seront chargés automatiquement après authentification
 const authStore = useAuthStore(pinia);
 authStore.initAuthListener();
-
-// Charger les référentiels (statuts, entreprises) depuis Firebase
-const referentielsStore = useReferentielsStore(pinia);
-referentielsStore.loadAll();
 
 // Initialiser PWA Elements pour la caméra sur le web
 defineCustomElements(window);

@@ -67,6 +67,13 @@ const getFirestore = () => {
   return admin.firestore();
 };
 
+// Récupérer l'instance Auth (Firebase Authentication Admin)
+const getAuth = () => {
+  const app = initializeFirebase();
+  if (!app) return null;
+  return admin.auth();
+};
+
 // Vérifier si Firebase est disponible
 const isFirebaseAvailable = () => {
   return initializeFirebase() !== null;
@@ -75,6 +82,7 @@ const isFirebaseAvailable = () => {
 module.exports = {
   initializeFirebase,
   getFirestore,
+  getAuth,
   isFirebaseAvailable,
   admin
 };

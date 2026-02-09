@@ -83,7 +83,7 @@ ON CONFLICT DO NOTHING;
 
 -- Utilisateur Manager par défaut (mot de passe: manager123)
 INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role) VALUES 
-('manager@example.mg', 'manager', 'Admin', 'Manager', 3)
+('manager@test.mg', 'manager', 'Admin', 'Manager', 3)
 ON CONFLICT (email) DO NOTHING;
 
 -- Signalements de test pour Antananarivo

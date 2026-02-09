@@ -11,6 +11,7 @@ import { doc, getDoc, updateDoc, collection, query, where, getDocs } from 'fireb
 import { auth, db } from '@/config/firebase';
 import type { User } from '@/types';
 import { fcmService } from '@/services/fcmService';
+import { useReferentielsStore } from '@/stores/referentiels';
 
 const MAX_TENTATIVES = 3;
 
@@ -41,6 +42,14 @@ export const useAuthStore = defineStore('auth', () => {
       currentUser.value = user;
       if (user) {
         await fetchUserProfile(user.uid);
+        
+        // Charger les référentiels (statuts, entreprises) maintenant que l'utilisateur est authentifié
+        try {
+          const referentielsStore = useReferentielsStore();
+          referentielsStore.loadAll();
+        } catch (err) {
+          console.error('Erreur chargement référentiels:', err);
+        }
         
         // Sauvegarder le token FCM - getToken() attend la fin de initialize()
         console.log('onAuthStateChanged: Tentative sauvegarde token FCM...');
@@ -145,20 +154,24 @@ export const useAuthStore = defineStore('auth', () => {
         throw new Error('Firebase Auth non configuré');
       }
 
-      // 1. Vérifier si l'utilisateur est bloqué AVANT la tentative de connexion
+      // 1. Tenter la connexion Firebase Auth EN PREMIER
+      // (on ne peut pas lire Firestore sans être authentifié à cause des rules)
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // 2. Connexion réussie - vérifier si l'utilisateur est bloqué
+      // (maintenant on est authentifié, on peut lire Firestore)
       if (db) {
         const blockedInfo = await checkIfUserBlocked(email);
         if (blockedInfo.bloque) {
+          // L'utilisateur est bloqué, le déconnecter immédiatement
+          await signOut(auth);
           error.value = 'Compte bloqué. Contactez un manager.';
           loading.value = false;
           throw new Error('Compte bloqué');
         }
       }
 
-      // 2. Tenter la connexion Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      
-      // 3. Connexion réussie - réinitialiser les tentatives
+      // 3. Connexion réussie et non bloqué - réinitialiser les tentatives
       try {
         if (db) {
           const found = await findUserDocRef(userCredential.user.uid);
@@ -182,8 +195,9 @@ export const useAuthStore = defineStore('auth', () => {
       
       // Si erreur de mot de passe incorrect, incrémenter les tentatives
       if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
-        await incrementLoginAttempts(email);
-        // error.value est mis à jour dans incrementLoginAttempts
+        // On n'est PAS authentifié ici, donc on ne peut pas écrire dans Firestore
+        // directement. On affiche juste le message d'erreur.
+        error.value = 'Email ou mot de passe incorrect.';
       } else if (!error.value) {
         error.value = getErrorMessage(err.code || err.message);
       }
