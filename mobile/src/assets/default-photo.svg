@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600" role="img" aria-label="Image par défaut">
+  <rect width="100%" height="100%" fill="#e6e9ee"/>
+  <g transform="translate(150,150)" fill="#bec6d1">
+    <rect x="0" y="0" width="500" height="300" rx="12" ry="12" fill="#dfe5ee"/>
+    <rect x="40" y="60" width="160" height="100" rx="8" fill="#c8d2e0"/>
+    <circle cx="300" cy="210" r="70" fill="#aebbd0"/>
+    <circle cx="300" cy="210" r="40" fill="#dfe5ee"/>
+    <rect x="420" y="20" width="40" height="20" rx="4" fill="#c8d2e0"/>
+  </g>
+  <text x="50%" y="92%" font-family="Segoe UI, Roboto, Arial" font-size="28" fill="#6b7380" text-anchor="middle">Aucune photo</text>
+</svg>
