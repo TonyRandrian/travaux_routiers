@@ -41,28 +41,9 @@ function ProtectedRoute({ children }) {
     return children;
   }
   
-  // Si pas connecté, rediriger vers login
-  if (!currentUser && !userProfile) {
+  // Si pas connecté OU pas de profil, rediriger vers login
+  if (!currentUser || !userProfile) {
     return <Navigate to="/" replace />;
-  }
-  
-  // Attendre que le profil soit chargé avant de vérifier le rôle
-  if (currentUser && !userProfile) {
-    return (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        backgroundColor: '#1a1a2e',
-        color: '#fff'
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '48px', marginBottom: '20px' }}>🚧</div>
-          <p>Chargement du profil...</p>
-        </div>
-      </div>
-    );
   }
   
   // Si connecté, vérifier le rôle
