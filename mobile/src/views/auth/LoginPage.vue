@@ -108,8 +108,8 @@ const router = useRouter();
 const route = useRoute();
 const authStore = useAuthStore();
 
-const email = ref('user1@gmail.com');
-const password = ref('user1pass');
+const email = ref('user1@test.mg');
+const password = ref('password'); // Valeur par défaut pour faciliter les tests, à retirer en production
 const showPassword = ref(false);
 const loading = ref(false);
 const error = ref<string | null>(null);
