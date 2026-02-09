@@ -270,7 +270,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     setLoading(true);
 
-    // Vérifier s'il y a une session sauvegardée
+    // Vérifier s'il y a une session sauvegardée ET valider le token côté serveur
     const savedPgUser = localStorage.getItem('pgUser');
     const savedPgProfile = localStorage.getItem('pgUserProfile');
 
@@ -278,16 +278,49 @@ export function AuthProvider({ children }) {
       try {
         const pgUser = JSON.parse(savedPgUser);
         const pgProfile = JSON.parse(savedPgProfile);
-        setCurrentUser(pgUser);
-        setUserProfile(pgProfile);
+        const token = pgProfile.accessToken;
+
+        if (!token) {
+          // Pas de token, session invalide
+          localStorage.removeItem('pgUser');
+          localStorage.removeItem('pgUserProfile');
+          setLoading(false);
+          return;
+        }
+
+        // Valider le token côté serveur
+        fetch(`${config.api.baseUrl}/api/utilisateurs/me`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(response => {
+            if (response.ok) {
+              // Token valide, restaurer la session
+              setCurrentUser(pgUser);
+              setUserProfile(pgProfile);
+            } else {
+              // Token expiré ou invalide, nettoyer la session
+              console.warn('Session expirée, reconnexion nécessaire');
+              localStorage.removeItem('pgUser');
+              localStorage.removeItem('pgUserProfile');
+            }
+            setLoading(false);
+          })
+          .catch(() => {
+            // Erreur réseau (API hors ligne), on nettoie quand même pour forcer le login
+            console.warn('API inaccessible, session nettoyée');
+            localStorage.removeItem('pgUser');
+            localStorage.removeItem('pgUserProfile');
+            setLoading(false);
+          });
       } catch (e) {
         console.error('Erreur parsing session:', e);
         localStorage.removeItem('pgUser');
         localStorage.removeItem('pgUserProfile');
+        setLoading(false);
       }
+    } else {
+      setLoading(false);
     }
-
-    setLoading(false);
   }, []);
 
   const value = {
