@@ -108,14 +108,14 @@
           <!-- Photos -->
           <div class="sheet-photos">
             <h4>📷 Photos ({{ selectedSignalement.photos?.length ?? 0 }})</h4>
-            <div class="photos-scroll">
+            <div class="photos-grid">
               <template v-if="selectedSignalement.photos && selectedSignalement.photos.length > 0">
-                <div v-for="(photo, idx) in selectedSignalement.photos" :key="photo.id || idx" class="photo-thumbnail" @click="openPhotoViewer(idx)">
+                <div v-for="(photo, idx) in selectedSignalement.photos" :key="photo.id || idx" class="photo-thumb-card" @click="openPhotoViewer(idx)">
                   <img :src="photo.url" :alt="'Photo ' + (idx + 1)" loading="lazy" />
                 </div>
               </template>
               <template v-else>
-                <div class="photo-thumbnail default-photo">
+                <div class="photo-thumb-card default-photo">
                   <img :src="defaultPhoto" alt="Photo par défaut" />
                   <span class="default-badge">Par défaut</span>
                 </div>
@@ -472,6 +472,39 @@ ion-fab-button {
   align-items: center;
   justify-content: center;
   opacity: 0.9;
+}
+
+/* New thumbnail grid (2 columns) */
+.photos-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+}
+.photo-thumb-card {
+  width: 100%;
+  aspect-ratio: 16/10;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.12);
+  cursor: pointer;
+  background: #f6f7f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.photo-thumb-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.photo-thumb-card.default-photo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.95;
+  filter: grayscale(10%);
 }
 .photo-viewer {
   background: #000;
