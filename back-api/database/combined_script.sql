@@ -99,9 +99,6 @@ ON CONFLICT (email) DO NOTHING;
 
 -- Signalements de test pour Antananarivo
 INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, date_signalement) VALUES 
-('Nid de poule Avenue de l''Indépendance', 'Grand nid de poule dangereux au centre-ville', -18.8792, 47.5079, 15.5, 2500000, 1, 1, NULL, '2026-01-15'),
-('Route dégradée Analakely', 'Chaussée très abîmée sur 50 mètres', -18.9100, 47.5250, 120.0, 45000000, 2, 1, 1, '2026-01-10'),
-('Travaux finalisés Isoraka', 'Réfection complète de la chaussée terminée', -18.8850, 47.5150, 200.0, 75000000, 3, 1, 2, '2025-12-20'),
-('Effondrement partiel Andravoahangy', 'Affaissement de la route suite aux pluies', -18.9050, 47.5350, 35.0, 15000000, 2, 1, 3, '2026-01-18'),
-('Fissures rue Rainitovo', 'Multiples fissures sur la chaussée', -18.8950, 47.5200, 80.0, 12000000, 1, 1, NULL, '2026-01-19'),
-('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15');
+('Nid de poule Avenue de l''Indépendance', 'Grand nid de poule dangereux au centre-ville', -18.8792, 47.5079, 15.5, 0, 1, 1, NULL, '2026-01-15'),
+('Route dégradée Analakely', 'Chaussée très abîmée sur 50 mètres', -18.9100, 47.5250, 120.0, 0, 2, 1, 1, '2026-01-10'),
+('Travaux finalisés Isoraka', 'Réfection complète de la chaussée terminée', -18.8850, 47.5150, 200.0, 0, 3, 1, 2, '2025-12-20');
