@@ -57,6 +57,14 @@ const formatCurrency = (amount) => {
   }).format(amount);
 };
 
+const getNiveauLabel = (typeReparation) => {
+  // Afficher le niveau de 0 à 10
+  if (typeReparation === null || typeReparation === undefined) {
+    return '0';
+  }
+  return typeReparation.toString();
+};
+
 const MapComponent = ({ 
   markers = [], 
   signalements = [],
@@ -121,6 +129,7 @@ const MapComponent = ({
                   </div>
                   <div>📐 <strong>Surface:</strong> {signalement.surface_m2 ? `${signalement.surface_m2} m²` : 'N/A'}</div>
                   <div>💰 <strong>Budget:</strong> {formatCurrency(signalement.budget)}</div>
+                  <div>⚠️ <strong>Niveau:</strong> {getNiveauLabel(signalement.type_reparation)}</div>
                   <div>🏢 <strong>Entreprise:</strong> {signalement.entreprise || 'Non assignée'}</div>
                 </div>
               </div>
@@ -203,6 +212,9 @@ const MapComponent = ({
                   </div>
                   <div style={{ marginBottom: '5px' }}>
                     💰 <strong>Budget:</strong> {formatCurrency(signalement.budget)}
+                  </div>
+                  <div style={{ marginBottom: '5px' }}>
+                    ⚠️ <strong>Niveau:</strong> {getNiveauLabel(signalement.type_reparation)}
                   </div>
                   <div>
                     🏢 <strong>Entreprise:</strong> {signalement.entreprise || 'Non assignée'}

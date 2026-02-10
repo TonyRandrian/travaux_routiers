@@ -883,6 +883,10 @@ const DetailSignalementModal = ({ signalement, getStatusColor, formatDate, onClo
               <span className="detail-value">{formatCurrency(signalement.budget)}</span>
             </div>
             <div className="detail-item">
+              <span className="detail-label">⚠️ Niveau</span>
+              <span className="detail-value">{signalement.type_reparation !== null && signalement.type_reparation !== undefined ? signalement.type_reparation : '0'}</span>
+            </div>
+            <div className="detail-item">
               <span className="detail-label">🏢 Entreprise</span>
               <span className="detail-value">{signalement.entreprise || 'Non assignée'}</span>
             </div>
@@ -924,6 +928,7 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
     description: signalement.description || '',
     surface_m2: signalement.surface_m2 || '',
     budget: signalement.budget || '',
+    type_reparation: signalement.type_reparation !== null && signalement.type_reparation !== undefined ? String(signalement.type_reparation) : '0',
     id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
     id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
   });
@@ -935,6 +940,7 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
       description: signalement.description || '',
       surface_m2: signalement.surface_m2 || '',
       budget: signalement.budget || '',
+      type_reparation: signalement.type_reparation !== null && signalement.type_reparation !== undefined ? String(signalement.type_reparation) : '0',
       id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
       id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
     });
@@ -951,6 +957,7 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
       ...formData,
       surface_m2: formData.surface_m2 ? parseFloat(formData.surface_m2) : null,
       budget: formData.budget ? parseFloat(formData.budget) : null,
+      type_reparation: formData.type_reparation ? parseInt(formData.type_reparation) : 0,
       id_statut_signalement: formData.id_statut_signalement ? parseInt(formData.id_statut_signalement) : null,
       id_entreprise: formData.id_entreprise ? parseInt(formData.id_entreprise) : null
     });
@@ -1026,6 +1033,22 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
                 value={formData.budget}
                 onChange={handleChange}
                 placeholder="Budget en MGA"
+              />
+            </div>
+          </div>
+          
+          <div className="form-row">
+            <div className="form-group">
+              <label>Niveau (0-10)</label>
+              <input
+                type="number"
+                name="type_reparation"
+                value={formData.type_reparation}
+                onChange={handleChange}
+                placeholder="Niveau de 0 à 10"
+                min="0"
+                max="10"
+                step="1"
               />
             </div>
           </div>
