@@ -746,6 +746,32 @@ const ManagerPanel = ({ onClose }) => {
             <div className="prix-section">
               <h3>Configuration des prix au m²</h3>
 
+              {(() => {
+                const today = new Date().toISOString().split('T')[0];
+                const applicable = prixM2List
+                  .filter(p => p.date_debut <= today)
+                  .sort((a, b) => b.id - a.id);
+                const prixActuel = applicable.length > 0 ? applicable[0] : null;
+                return prixActuel ? (
+                  <div className="prix-form-card" style={{ marginBottom: '1rem', background: '#e8f5e9' }}>
+                    <h4>📌 Prix actuel applicable</h4>
+                    <p style={{ fontSize: '1.3rem', margin: '0.5rem 0' }}>
+                      <strong>{new Intl.NumberFormat('fr-FR').format(prixActuel.prix)} MGA/m²</strong>
+                      <span style={{ fontSize: '0.9rem', marginLeft: '1rem', color: '#555' }}>
+                        (depuis le {formatDate(prixActuel.date_debut)})
+                      </span>
+                    </p>
+                  </div>
+                ) : (
+                  <div className="prix-form-card" style={{ marginBottom: '1rem', background: '#fff3e0' }}>
+                    <h4>⚠️ Aucun prix applicable aujourd'hui</h4>
+                    <p style={{ margin: '0.5rem 0', color: '#e65100' }}>
+                      Aucun prix avec une date de début antérieure ou égale à aujourd'hui.
+                    </p>
+                  </div>
+                );
+              })()}
+
               <div className="prix-form-card">
                 <h4>➕ Ajouter un nouveau prix</h4>
                 <form onSubmit={handleAddPrix} className="prix-form">
