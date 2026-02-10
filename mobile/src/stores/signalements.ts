@@ -65,8 +65,10 @@ function normalizeSignalement(doc: any): Signalement {
     description: data.description || '',
     latitude: data.latitude || 0,
     longitude: data.longitude || 0,
-    surface_m2: data.surface_m2 || null,
-    budget: data.budget || null,
+    surface_m2: (data.surface_m2 !== undefined && data.surface_m2 !== null) ? data.surface_m2 : null,
+    budget: (data.budget !== undefined && data.budget !== null) ? data.budget : null,
+    // type_reparation peut être envoyé par le Web; par défaut 0
+    type_reparation: (data.type_reparation !== undefined && data.type_reparation !== null) ? data.type_reparation : 0,
     date_signalement: data.date_signalement || '',
     statut,
     utilisateur,
@@ -179,6 +181,7 @@ export const useSignalementsStore = defineStore('signalements', () => {
       longitude: number;
       surface_m2?: number | null;
       budget?: number | null;
+      type_reparation?: number | null;
       photos?: PhotoSignalement[];
     },
     utilisateur: SignalementUtilisateur,
@@ -205,7 +208,10 @@ export const useSignalementsStore = defineStore('signalements', () => {
         latitude: data.latitude,
         longitude: data.longitude,
         surface_m2: data.surface_m2 || null,
-        budget: data.budget || null,
+        // Budget envoyé par le mobile par défaut à 0. Le Web pourra recalculer.
+        budget: (data.budget !== undefined && data.budget !== null) ? data.budget : 0,
+        // Type de réparation envoyé par le mobile par défaut 0 (sera mis à jour par le Web)
+        type_reparation: (data.type_reparation !== undefined && data.type_reparation !== null) ? data.type_reparation : 0,
         date_signalement: new Date().toISOString().split('T')[0],
         statut: statutNouveau, // NOUVEAU par défaut depuis référentiels
         utilisateur: utilisateur,

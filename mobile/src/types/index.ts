@@ -64,6 +64,7 @@ export interface Signalement {
   postgres_id?: number;                 // ID dans PostgreSQL pour sync
   synced_at?: string | null;            // Timestamp de dernière sync
   pourcentage_completion?: number;      // Pourcentage de complétion (0-100)
+  type_reparation?: number | null;        // Code du type de réparation (défini par le Web; mobile envoie 0 par défaut)
 }
 
 export interface Stats {
