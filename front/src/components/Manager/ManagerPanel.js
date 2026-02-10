@@ -1086,22 +1086,6 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
           
           <div className="form-row">
             <div className="form-group">
-              <label>Niveau (0-10)</label>
-              <input
-                type="number"
-                name="type_reparation"
-                value={formData.type_reparation}
-                onChange={handleChange}
-                placeholder="Niveau de 0 à 10"
-                min="0"
-                max="10"
-                step="1"
-              />
-            </div>
-          </div>
-          
-          <div className="form-row">
-            <div className="form-group">
               <label>Statut</label>
               <select
                 name="id_statut_signalement"
