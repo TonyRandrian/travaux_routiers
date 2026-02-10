@@ -57,6 +57,17 @@ CREATE TABLE IF NOT EXISTS signalement_statut(
     date_changement TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+
+--Creation de la table de config de prix de rreparation par m2
+CREATE TABLE IF NOT EXISTS config_prix_m2 (
+    id SERIAL PRIMARY KEY,
+    prix DOUBLE PRECISION NOT NULL,
+    date_debut DATE NOT NULL
+);
+
+INSERT INTO config_prix_m2 (prix, date_debut) VALUES 
+(50000, '2025-01-01')
+
 -- Données initiales (INSERT IGNORE pour éviter les doublons)
 
 -- Rôles
