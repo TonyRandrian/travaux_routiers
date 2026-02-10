@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS utilisateur (
 
 CREATE TABLE IF NOT EXISTS entreprise (
     id SERIAL PRIMARY KEY,
-    nom VARCHAR(150) NOT NULL,
+    nom VARCHAR(150) UNIQUE NOT NULL,
     contact VARCHAR(100)
 );
 
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS config_prix_m2 (
 );
 
 INSERT INTO config_prix_m2 (prix, date_debut) VALUES 
-(50000, '2025-01-01')
+(50000, '2025-01-01');
 
 -- Données initiales (INSERT IGNORE pour éviter les doublons)
 
@@ -90,7 +90,7 @@ INSERT INTO entreprise (nom, contact) VALUES
 ('SOGEA SATOM', 'sogea@example.mg'),
 ('EIFFAGE Madagascar', 'eiffage@example.mg'),
 ('ENTREPRISE GÉNÉRALE', 'general@example.mg')
-ON CONFLICT DO NOTHING;
+ON CONFLICT (nom) DO NOTHING;
 
 -- Utilisateur Manager par défaut (mot de passe: manager123)
 INSERT INTO utilisateur (email, mot_de_passe, nom, prenom, id_role) VALUES 
@@ -104,5 +104,4 @@ INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, bu
 ('Travaux finalisés Isoraka', 'Réfection complète de la chaussée terminée', -18.8850, 47.5150, 200.0, 75000000, 3, 1, 2, '2025-12-20'),
 ('Effondrement partiel Andravoahangy', 'Affaissement de la route suite aux pluies', -18.9050, 47.5350, 35.0, 15000000, 2, 1, 3, '2026-01-18'),
 ('Fissures rue Rainitovo', 'Multiples fissures sur la chaussée', -18.8950, 47.5200, 80.0, 12000000, 1, 1, NULL, '2026-01-19'),
-('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15')
-ON CONFLICT DO NOTHING;
+('Réparation terminée Ambohijatovo', 'Travaux de réparation achevés', -18.8820, 47.5100, 45.0, 8000000, 3, 1, 4, '2025-12-15');

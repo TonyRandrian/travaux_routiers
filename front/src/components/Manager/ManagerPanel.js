@@ -11,6 +11,8 @@ const ManagerPanel = ({ onClose }) => {
   const [allSignalements, setAllSignalements] = useState([]);
   const [statuts, setStatuts] = useState([]);
   const [entreprises, setEntreprises] = useState([]);
+  const [prixM2List, setPrixM2List] = useState([]);
+  const [newPrix, setNewPrix] = useState({ prix: '', date_debut: '' });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   const [editingSignalement, setEditingSignalement] = useState(null);
@@ -53,6 +55,7 @@ const ManagerPanel = ({ onClose }) => {
     fetchSignalements();
     fetchStatuts();
     fetchEntreprises();
+    fetchPrixM2();
     checkSyncStatus();
   }, []);
 
@@ -127,6 +130,72 @@ const ManagerPanel = ({ onClose }) => {
     } catch (err) {
       console.error('Erreur récupération entreprises:', err);
     }
+  };
+
+  const fetchPrixM2 = async () => {
+    try {
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/config/prix-m2`);
+      const data = await response.json();
+      setPrixM2List(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Erreur récupération prix m²:', err);
+    }
+  };
+
+  const handleAddPrix = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/config/prix-m2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          prix: parseFloat(newPrix.prix),
+          date_debut: newPrix.date_debut
+        })
+      });
+
+      if (response.ok) {
+        showMessage('success', 'Prix ajouté avec succès');
+        setNewPrix({ prix: '', date_debut: '' });
+        fetchPrixM2();
+      } else {
+        const data = await response.json();
+        showMessage('error', data.error || 'Erreur lors de l\'ajout du prix');
+      }
+    } catch (err) {
+      showMessage('error', 'Erreur de connexion');
+    }
+    setLoading(false);
+  };
+
+  const handleDeletePrix = async (id) => {
+    if (!window.confirm('Supprimer ce prix ?')) return;
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/config/prix-m2/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        showMessage('success', 'Prix supprimé');
+        fetchPrixM2();
+      } else {
+        const data = await response.json();
+        showMessage('error', data.error || 'Erreur lors de la suppression');
+      }
+    } catch (err) {
+      showMessage('error', 'Erreur de connexion');
+    }
+    setLoading(false);
   };
 
   const handleUnblockUser = async (userId) => {
@@ -410,6 +479,12 @@ const ManagerPanel = ({ onClose }) => {
             📍 Gestion signalements ({allSignalements.length})
           </button>
           <button 
+            className={`tab ${activeTab === 'prix' ? 'active' : ''}`}
+            onClick={() => setActiveTab('prix')}
+          >
+            💰 Prix m² ({prixM2List.length})
+          </button>
+          <button 
             className={`tab ${activeTab === 'sync' ? 'active' : ''}`}
             onClick={() => setActiveTab('sync')}
           >
@@ -656,6 +731,80 @@ const ManagerPanel = ({ onClose }) => {
                             onClick={() => setEditingSignalement(sig)}
                           >
                             ✏️ Modifier
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* Onglet Prix m² */}
+          {activeTab === 'prix' && (
+            <div className="prix-section">
+              <h3>Configuration des prix au m²</h3>
+
+              <div className="prix-form-card">
+                <h4>➕ Ajouter un nouveau prix</h4>
+                <form onSubmit={handleAddPrix} className="prix-form">
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Prix (MGA/m²) *</label>
+                      <input
+                        type="number"
+                        value={newPrix.prix}
+                        onChange={(e) => setNewPrix({ ...newPrix, prix: e.target.value })}
+                        placeholder="Ex: 50000"
+                        required
+                        min="0"
+                        step="0.01"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Date de début *</label>
+                      <input
+                        type="date"
+                        value={newPrix.date_debut}
+                        onChange={(e) => setNewPrix({ ...newPrix, date_debut: e.target.value })}
+                        required
+                      />
+                    </div>
+                    <div className="form-group form-group-btn">
+                      <button type="submit" className="create-btn" disabled={loading}>
+                        {loading ? '⏳...' : '✓ Ajouter'}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {prixM2List.length === 0 ? (
+                <p className="empty-message">Aucun prix configuré</p>
+              ) : (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Prix (MGA/m²)</th>
+                      <th>Date de début</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prixM2List.map(p => (
+                      <tr key={p.id}>
+                        <td>{p.id}</td>
+                        <td><strong>{new Intl.NumberFormat('fr-FR').format(p.prix)} MGA</strong></td>
+                        <td>{formatDate(p.date_debut)}</td>
+                        <td>
+                          <button
+                            className="action-btn delete"
+                            onClick={() => handleDeletePrix(p.id)}
+                            disabled={loading}
+                          >
+                            🗑️ Supprimer
                           </button>
                         </td>
                       </tr>

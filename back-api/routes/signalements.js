@@ -364,4 +364,52 @@ router.post('/config/entreprises', authenticateToken, requireManager, async (req
   }
 });
 
+// ============================================
+// ROUTES CONFIG PRIX M2
+// ============================================
+
+// GET - Récupérer tous les prix m² (public)
+router.get('/config/prix-m2', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM config_prix_m2 ORDER BY date_debut DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération prix m²:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST - Ajouter un prix m² (Manager uniquement)
+router.post('/config/prix-m2', authenticateToken, requireManager, async (req, res) => {
+  try {
+    const { prix, date_debut } = req.body;
+    if (!prix || !date_debut) {
+      return res.status(400).json({ error: 'Le prix et la date de début sont requis' });
+    }
+    const result = await pool.query(
+      'INSERT INTO config_prix_m2 (prix, date_debut) VALUES ($1, $2) RETURNING *',
+      [prix, date_debut]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur création prix m²:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE - Supprimer un prix m² (Manager uniquement)
+router.delete('/config/prix-m2/:id', authenticateToken, requireManager, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM config_prix_m2 WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Prix non trouvé' });
+    }
+    res.json({ message: 'Prix supprimé', data: result.rows[0] });
+  } catch (err) {
+    console.error('Erreur suppression prix m²:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
