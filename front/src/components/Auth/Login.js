@@ -3,8 +3,8 @@ import { useAuth, ROLES } from '../../contexts/AuthContext';
 import './Auth.css';
 
 function Login({ onSwitchToRegister, onForgotPassword, onLoginSuccess, onVisitorMode, onAccessDenied }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('manager@test.mg');
+  const [password, setPassword] = useState('manager');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login, enableVisitorMode } = useAuth();
