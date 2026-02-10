@@ -688,21 +688,6 @@ const ManagerPanel = ({ onClose }) => {
 
               {/* Boutons de synchronisation */}
               <div className="sync-actions">
-                <div className="sync-card main-sync">
-                  <div className="sync-icon">
-                    {syncStatus === 'syncing' ? '⏳' : syncStatus === 'success' ? '✅' : syncStatus === 'error' ? '❌' : '🔄'}
-                  </div>
-                  <h4>Synchronisation Complète</h4>
-                  <p>Synchronisation bidirectionnelle entre PostgreSQL et Firestore</p>
-                  <button 
-                    className={`sync-btn primary ${syncStatus}`}
-                    onClick={handleSync}
-                    disabled={syncStatus === 'syncing' || !firebaseAvailable}
-                  >
-                    {syncStatus === 'syncing' ? 'Synchronisation en cours...' : '🔄 Synchroniser tout'}
-                  </button>
-                </div>
-
                 <div className="sync-row">
                   <div className="sync-card">
                     <div className="sync-icon">📥</div>
