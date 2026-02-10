@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS config_prix_m2 (
 );
 
 INSERT INTO config_prix_m2 (prix, date_debut) VALUES 
-(50000, '2025-01-01')
+(50000, '2025-01-01');
 
 -- Données initiales (INSERT IGNORE pour éviter les doublons)
 
