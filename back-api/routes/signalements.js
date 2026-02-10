@@ -245,7 +245,7 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
         const prixResult = await pool.query(
           `SELECT prix FROM config_prix_m2
            WHERE date_debut <= $1
-           ORDER BY date_debut DESC
+           ORDER BY date_debut DESC, id DESC
            LIMIT 1`,
           [dateSignalement]
         );
@@ -366,7 +366,7 @@ router.get('/config/prix-m2', async (req, res) => {
     const result = await pool.query(
       `SELECT prix FROM config_prix_m2
        WHERE date_debut <= $1
-       ORDER BY date_debut DESC
+       ORDER BY date_debut DESC, id DESC
        LIMIT 1`,
       [queryDate]
     );
