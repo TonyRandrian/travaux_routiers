@@ -187,6 +187,7 @@ class SyncService {
           s.firebase_id,
           s.synced_at,
           s.pourcentage_completion,
+          s.type_reparation,
           ss.code as statut_code,
           ss.libelle as statut,
           e.nom as entreprise,
@@ -809,6 +810,7 @@ class SyncService {
       date_signalement: pgData.date_signalement ? pgData.date_signalement.toISOString() : new Date().toISOString(),
       pg_id: pgData.id,
       pourcentage_completion: pgData.pourcentage_completion ? parseFloat(pgData.pourcentage_completion) : 0,
+      type_reparation: pgData.type_reparation ? parseInt(pgData.type_reparation) : 0,
       updatedAt: new Date().toISOString(),
       syncedFromServer: true
     };

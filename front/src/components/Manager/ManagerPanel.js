@@ -688,21 +688,6 @@ const ManagerPanel = ({ onClose }) => {
 
               {/* Boutons de synchronisation */}
               <div className="sync-actions">
-                <div className="sync-card main-sync">
-                  <div className="sync-icon">
-                    {syncStatus === 'syncing' ? '⏳' : syncStatus === 'success' ? '✅' : syncStatus === 'error' ? '❌' : '🔄'}
-                  </div>
-                  <h4>Synchronisation Complète</h4>
-                  <p>Synchronisation bidirectionnelle entre PostgreSQL et Firestore</p>
-                  <button 
-                    className={`sync-btn primary ${syncStatus}`}
-                    onClick={handleSync}
-                    disabled={syncStatus === 'syncing' || !firebaseAvailable}
-                  >
-                    {syncStatus === 'syncing' ? 'Synchronisation en cours...' : '🔄 Synchroniser tout'}
-                  </button>
-                </div>
-
                 <div className="sync-row">
                   <div className="sync-card">
                     <div className="sync-icon">📥</div>
@@ -894,6 +879,14 @@ const DetailSignalementModal = ({ signalement, getStatusColor, formatDate, onClo
               <span className="detail-label">📊 Avancement</span>
               <span className="detail-value">{signalement.pourcentage_completion || 0}%</span>
             </div>
+            <div className="detail-item">
+              <span className="detail-label">🔧 Type réparation</span>
+              <span className="detail-value">
+                {signalement.type_reparation > 0 
+                  ? `Niveau ${signalement.type_reparation}/10` 
+                  : 'Non attribué'}
+              </span>
+            </div>
           </div>
           
           {signalement.signale_par && (
@@ -925,7 +918,8 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
     surface_m2: signalement.surface_m2 || '',
     budget: signalement.budget || '',
     id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
-    id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
+    id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : '',
+    type_reparation: signalement.type_reparation || 0
   });
 
   // Mettre à jour les données si le signalement change
@@ -936,9 +930,24 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
       surface_m2: signalement.surface_m2 || '',
       budget: signalement.budget || '',
       id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
-      id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
+      id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : '',
+      type_reparation: signalement.type_reparation || 0
     });
   }, [signalement]);
+
+  // Couleurs des niveaux de réparation (1 = mineur, 10 = critique)
+  const reparationLevels = [
+    { level: 1, color: '#4CAF50' },
+    { level: 2, color: '#66BB6A' },
+    { level: 3, color: '#8BC34A' },
+    { level: 4, color: '#CDDC39' },
+    { level: 5, color: '#FDD835' },
+    { level: 6, color: '#FFB300' },
+    { level: 7, color: '#FF9800' },
+    { level: 8, color: '#FF5722' },
+    { level: 9, color: '#F44336' },
+    { level: 10, color: '#B71C1C' }
+  ];
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -952,7 +961,8 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
       surface_m2: formData.surface_m2 ? parseFloat(formData.surface_m2) : null,
       budget: formData.budget ? parseFloat(formData.budget) : null,
       id_statut_signalement: formData.id_statut_signalement ? parseInt(formData.id_statut_signalement) : null,
-      id_entreprise: formData.id_entreprise ? parseInt(formData.id_entreprise) : null
+      id_entreprise: formData.id_entreprise ? parseInt(formData.id_entreprise) : null,
+      type_reparation: formData.type_reparation ? parseInt(formData.type_reparation) : null
     });
   };
 
@@ -960,14 +970,14 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
     <div className="modal-overlay">
       <div className="edit-modal">
         <div className="modal-header">
-          <h3>✏️ Modifier le signalement</h3>
+          <h3>Modifier le signalement</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
         
         {/* Galerie de photos */}
         {signalement.photos && signalement.photos.length > 0 && (
           <div className="photos-gallery">
-            <h4>📷 Photos ({signalement.photos.length})</h4>
+            <h4>Photos ({signalement.photos.length})</h4>
             <div className="photos-grid">
               {signalement.photos.map((photo, idx) => (
                 <div key={photo.id || idx} className="photo-item">
@@ -1059,6 +1069,55 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
               </select>
             </div>
           </div>
+
+          {/* Sélecteur de type de réparation - affiché si non encore enregistré en base */}
+          {signalement.type_reparation === 0 && (
+            <div className="type-reparation-section">
+              <div className="type-reparation-header">
+                <div>
+                  <h4>Niveau de réparation requis</h4>
+                  <p className="type-reparation-subtitle">Ce signalement n'a pas encore de type de réparation attribué. Sélectionnez le niveau de gravité approprié.</p>
+                </div>
+              </div>
+
+              <div className="severity-scale">
+                <div className="scale-labels">
+                  <span className="scale-label-low">Mineur</span>
+                  <span className="scale-label-high">Critique</span>
+                </div>
+                <div className="severity-levels">
+                  {reparationLevels.map((item) => (
+                    <div
+                      key={item.level}
+                      className={`severity-level ${formData.type_reparation === item.level ? 'selected' : ''}`}
+                      style={{
+                        '--level-color': item.color,
+                        '--level-opacity': formData.type_reparation === item.level ? 1 : 0.6
+                      }}
+                      onClick={() => setFormData(prev => ({ ...prev, type_reparation: item.level }))}
+                    >
+                      <span className="level-number">{item.level}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {formData.type_reparation > 0 && (
+                <div className="level-selection-indicator">
+                  Niveau sélectionné : <strong>{formData.type_reparation}</strong> / 10
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Afficher le type de réparation déjà attribué */}
+          {signalement.type_reparation > 0 && (
+            <div className="type-reparation-assigned">
+              <div>
+                <strong>Type de réparation attribué : Niveau {signalement.type_reparation} / 10</strong>
+              </div>
+            </div>
+          )}
           
           <div className="modal-actions">
             <button type="button" className="cancel-btn" onClick={onClose}>
