@@ -16,6 +16,7 @@ services:
       - ./back-api/database/migration_sync.sql:/docker-entrypoint-initdb.d/migration_sync.sql
       - ./back-api/database/script_03022026_photo.sql:/docker-entrypoint-initdb.d/script_03022026_photo.sql
       - ./back-api/database/vue_dashboard_traitement.sql:/docker-entrypoint-initdb.d/vue_dashboard_traitement.sql
+      - ./back-api/database/add_type_reparation_to_signalement.sql:/docker-entrypoint-initdb.d/add_type_reparation_to_signalement.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-user} -d ${DB_NAME:-travaux_routiers}"]
       interval: 5s

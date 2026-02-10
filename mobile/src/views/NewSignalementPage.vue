@@ -110,20 +110,6 @@
               min="0"
             ></ion-input>
           </div>
-
-          <!-- Budget estimé -->
-          <div class="form-group">
-            <ion-label>Budget estimé (Ar)</ion-label>
-            <ion-input
-              :value="form.budget"
-              @ion-input="form.budget = parseFloat(String($event.detail?.value ?? '')) || null"
-              type="number"
-              placeholder="Ex: 500000"
-              step="1000"
-              min="0"
-            ></ion-input>
-          </div>
-
           <!-- Entreprise -->
           <div class="form-group">
             <ion-label>Entreprise (optionnel)</ion-label>
@@ -254,7 +240,7 @@ const form = ref({
   titre: '',
   description: '',
   surface_m2: null as number | null,
-  budget: null as number | null,
+  budget: 0 as number,  // Par défaut 0 : le Web calculera le budget final
   entreprise_id: null as number | null,
   latitude: null as number | null,
   longitude: null as number | null
@@ -363,7 +349,9 @@ async function handleSubmit() {
         latitude: form.value.latitude!,
         longitude: form.value.longitude!,
         surface_m2: form.value.surface_m2,
-        budget: form.value.budget,
+        // Le mobile envoie une valeur par défaut. Le calcul réel sera fait côté Web.
+        budget: form.value.budget ?? 0,
+        type_reparation: 0,
         photos: [] // Photos vides initialement
       },
       utilisateur,

@@ -24,6 +24,7 @@ router.get('/', async (req, res) => {
         s.id_statut_signalement,
         s.id_entreprise,
         s.pourcentage_completion,
+        s.type_reparation,
         ss.code as statut_code,
         ss.libelle as statut,
         e.nom as entreprise,
@@ -190,7 +191,7 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
 router.put('/:id', authenticateToken, requireManager, async (req, res) => {
   try {
     const { id } = req.params;
-    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise } = req.body;
+    const { titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, type_reparation } = req.body;
     
     // Récupérer le statut actuel et les infos du signalement
     const currentResult = await pool.query(`
@@ -258,10 +259,11 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
           budget = COALESCE($4, budget),
           id_statut_signalement = COALESCE($5, id_statut_signalement),
           id_entreprise = COALESCE($6, id_entreprise),
-          pourcentage_completion = COALESCE($7, pourcentage_completion)
+          pourcentage_completion = COALESCE($7, pourcentage_completion),
+          type_reparation = COALESCE($9, type_reparation)
       WHERE id = $8
       RETURNING *
-    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion, id]);
+    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion, id, type_reparation]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Signalement non trouvé' });
