@@ -153,7 +153,7 @@ router.get('/:id', async (req, res) => {
 // POST - Créer un nouveau signalement (utilisateurs connectés)
 router.post('/', authenticateToken, requireUser, async (req, res) => {
   try {
-    const { titre, description, latitude, longitude, surface_m2, budget, id_utilisateur, id_entreprise } = req.body;
+    const { titre, description, latitude, longitude, surface_m2, budget, type_reparation, id_utilisateur, id_entreprise } = req.body;
     
     // Récupérer l'ID du statut "NOUVEAU"
     const statutResult = await pool.query(
@@ -163,12 +163,14 @@ router.post('/', authenticateToken, requireUser, async (req, res) => {
     
     // Nouveau signalement = 0% d'avancement
     const pourcentage_completion = 0;
+    // Niveau par défaut = 0 si non fourni
+    const niveau = type_reparation !== undefined ? type_reparation : 0;
     
     const result = await pool.query(`
-      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, id_statut_signalement, id_utilisateur, id_entreprise, pourcentage_completion)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO signalement (titre, description, latitude, longitude, surface_m2, budget, type_reparation, id_statut_signalement, id_utilisateur, id_entreprise, pourcentage_completion)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
-    `, [titre, description, latitude, longitude, surface_m2, budget, id_statut, id_utilisateur, id_entreprise, pourcentage_completion]);
+    `, [titre, description, latitude, longitude, surface_m2, budget, niveau, id_statut, id_utilisateur, id_entreprise, pourcentage_completion]);
     
     // Ajouter l'historique du statut
     await pool.query(`
