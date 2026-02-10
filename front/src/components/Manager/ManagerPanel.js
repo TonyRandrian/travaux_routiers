@@ -134,7 +134,7 @@ const ManagerPanel = ({ onClose }) => {
 
   const fetchPrixM2 = async () => {
     try {
-      const response = await fetch(`${config.api.baseUrl}/api/signalements/config/prix-m2`);
+      const response = await fetch(`${config.api.baseUrl}/api/signalements/config/prix-m2/all`);
       const data = await response.json();
       setPrixM2List(Array.isArray(data) ? data : []);
     } catch (err) {

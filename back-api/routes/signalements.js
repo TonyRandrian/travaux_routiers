@@ -357,6 +357,17 @@ router.delete('/:id', authenticateToken, requireManager, async (req, res) => {
 // ROUTES DE CONFIGURATION (Publiques en lecture)
 // ============================================
 
+// GET - Récupérer tous les prix m² (pour le panel admin)
+router.get('/config/prix-m2/all', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM config_prix_m2 ORDER BY date_debut DESC');
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération liste prix m²:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET - Récupérer le prix au m² applicable pour une date donnée
 router.get('/config/prix-m2', async (req, res) => {
   try {
