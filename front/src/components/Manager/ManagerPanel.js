@@ -789,7 +789,7 @@ const ManagerPanel = ({ onClose }) => {
                       <th>ID</th>
                       <th>Prix (MGA/m²)</th>
                       <th>Date de début</th>
-                      <th>Action</th>
+                      {/* <th>Action</th> */}
                     </tr>
                   </thead>
                   <tbody>
@@ -798,7 +798,7 @@ const ManagerPanel = ({ onClose }) => {
                         <td>{p.id}</td>
                         <td><strong>{new Intl.NumberFormat('fr-FR').format(p.prix)} MGA</strong></td>
                         <td>{formatDate(p.date_debut)}</td>
-                        <td>
+                        {/* <td>
                           <button
                             className="action-btn delete"
                             onClick={() => handleDeletePrix(p.id)}
@@ -806,7 +806,7 @@ const ManagerPanel = ({ onClose }) => {
                           >
                             🗑️ Supprimer
                           </button>
-                        </td>
+                        </td> */}
                       </tr>
                     ))}
                   </tbody>
