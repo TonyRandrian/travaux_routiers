@@ -15,3 +15,6 @@
 
 -- Vue pour les statistiques de traitement (dashboard)
 \i /docker-entrypoint-initdb.d/vue_dashboard_traitement.sql
+
+-- Ajout du champ type_reparation
+\i /docker-entrypoint-initdb.d/add_type_reparation_to_signalement.sql
