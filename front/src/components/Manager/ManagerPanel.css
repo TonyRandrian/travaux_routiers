@@ -1122,6 +1122,78 @@
   }
 }
 
+/* ============================================
+   Prix m² Section
+   ============================================ */
+
+.prix-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+  color: #1a1a2e;
+}
+
+.prix-form-card {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 25px;
+}
+
+.prix-form-card h4 {
+  margin: 0 0 15px 0;
+  font-size: 15px;
+  color: #333;
+}
+
+.prix-form .form-row {
+  display: flex;
+  gap: 15px;
+  align-items: flex-end;
+}
+
+.prix-form .form-group {
+  flex: 1;
+}
+
+.prix-form .form-group-btn {
+  flex: 0 0 auto;
+  padding-bottom: 2px;
+}
+
+.prix-form label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 600;
+  font-size: 13px;
+  color: #555;
+}
+
+.prix-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+}
+
+.prix-form input:focus {
+  border-color: #FFC107;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 193, 7, 0.15);
+}
+
+.action-btn.delete {
+  background: #ffebee;
+  color: #c62828;
+}
+
+.action-btn.delete:hover {
+  background: #c62828;
+  color: white;
+}
+
 /* =============================================
    TYPE DE RÉPARATION - Sélecteur de niveau
    ============================================= */
