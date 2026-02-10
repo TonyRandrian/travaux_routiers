@@ -1292,3 +1292,20 @@
     font-size: 13px;
   }
 }
+
+/* Budget readonly et formule */
+.readonly-input {
+  background-color: #f0f0f0 !important;
+  color: #555 !important;
+  cursor: not-allowed;
+  border: 1px dashed #bbb !important;
+  font-weight: 600;
+}
+
+.budget-formula {
+  display: block;
+  margin-top: 4px;
+  color: #666;
+  font-size: 12px;
+  font-style: italic;
+}

@@ -921,11 +921,32 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
     description: signalement.description || '',
     surface_m2: signalement.surface_m2 || '',
     budget: signalement.budget || '',
-    type_reparation: signalement.type_reparation !== null && signalement.type_reparation !== undefined ? String(signalement.type_reparation) : '0',
+    type_reparation: signalement.type_reparation || 0,
     id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
-    id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : '',
-    type_reparation: signalement.type_reparation || 0
+    id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
   });
+  const [prixM2, setPrixM2] = useState(null);
+
+  // Récupérer le prix au m² applicable selon la date du signalement
+  useEffect(() => {
+    const fetchPrix = async () => {
+      try {
+        const dateParam = signalement.date_signalement
+          ? new Date(signalement.date_signalement).toISOString().split('T')[0]
+          : new Date().toISOString().split('T')[0];
+        const response = await fetch(
+          `${config.api.baseUrl}/api/signalements/config/prix-m2?date=${dateParam}`
+        );
+        if (response.ok) {
+          const data = await response.json();
+          setPrixM2(data.prix_m2);
+        }
+      } catch (err) {
+        console.error('Erreur récupération prix m²:', err);
+      }
+    };
+    fetchPrix();
+  }, [signalement.date_signalement]);
 
   // Mettre à jour les données si le signalement change
   useEffect(() => {
@@ -934,12 +955,21 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
       description: signalement.description || '',
       surface_m2: signalement.surface_m2 || '',
       budget: signalement.budget || '',
-      type_reparation: signalement.type_reparation !== null && signalement.type_reparation !== undefined ? String(signalement.type_reparation) : '0',
+      type_reparation: signalement.type_reparation || 0,
       id_statut_signalement: signalement.id_statut_signalement ? String(signalement.id_statut_signalement) : '',
-      id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : '',
-      type_reparation: signalement.type_reparation || 0
+      id_entreprise: signalement.id_entreprise ? String(signalement.id_entreprise) : ''
     });
   }, [signalement]);
+
+  // Recalculer le budget quand type_reparation ou surface_m2 change
+  useEffect(() => {
+    if (prixM2 !== null && formData.type_reparation > 0 && formData.surface_m2) {
+      const calculatedBudget = prixM2 * parseInt(formData.type_reparation) * parseFloat(formData.surface_m2);
+      setFormData(prev => ({ ...prev, budget: calculatedBudget }));
+    } else if (parseInt(formData.type_reparation) === 0) {
+      setFormData(prev => ({ ...prev, budget: 0 }));
+    }
+  }, [formData.type_reparation, formData.surface_m2, prixM2]);
 
   // Couleurs des niveaux de réparation (1 = mineur, 10 = critique)
   const reparationLevels = [
@@ -963,13 +993,14 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
   const handleSubmit = (e) => {
     e.preventDefault();
     onSave(signalement.id, {
-      ...formData,
+      titre: formData.titre,
+      description: formData.description,
       surface_m2: formData.surface_m2 ? parseFloat(formData.surface_m2) : null,
-      budget: formData.budget ? parseFloat(formData.budget) : null,
+      // Le budget est calculé côté backend via prix_m2 * niveau * surface
+      budget: formData.budget ? parseFloat(formData.budget) : 0,
       type_reparation: formData.type_reparation ? parseInt(formData.type_reparation) : 0,
       id_statut_signalement: formData.id_statut_signalement ? parseInt(formData.id_statut_signalement) : null,
-      id_entreprise: formData.id_entreprise ? parseInt(formData.id_entreprise) : null,
-      type_reparation: formData.type_reparation ? parseInt(formData.type_reparation) : null
+      id_entreprise: formData.id_entreprise ? parseInt(formData.id_entreprise) : null
     });
   };
 
@@ -1036,14 +1067,20 @@ const EditSignalementModal = ({ signalement, statuts, entreprises, onSave, onClo
             </div>
             
             <div className="form-group">
-              <label>Budget (MGA)</label>
+              <label>Budget (MGA) — calculé automatiquement</label>
               <input
                 type="number"
                 name="budget"
                 value={formData.budget}
-                onChange={handleChange}
-                placeholder="Budget en MGA"
+                readOnly
+                className="readonly-input"
+                title={prixM2 ? `Formule : ${prixM2} Ar/m² × niveau × surface` : 'Prix m² non disponible'}
               />
+              {prixM2 !== null && (
+                <small className="budget-formula">
+                  = {prixM2.toLocaleString('fr-FR')} Ar/m² × niveau {formData.type_reparation} × {formData.surface_m2 || 0} m²
+                </small>
+              )}
             </div>
           </div>
           

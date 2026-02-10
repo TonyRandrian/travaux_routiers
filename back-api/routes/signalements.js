@@ -230,6 +230,32 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
     //   }
     // }
     
+    // === Auto-calcul du budget si type_reparation est fourni ===
+    let computedBudget = budget; // utilise la valeur fournie par défaut
+    if (type_reparation !== undefined && type_reparation !== null) {
+      // Récupérer les infos du signalement pour surface_m2 et date_signalement
+      const sigInfo = await pool.query(
+        'SELECT surface_m2, date_signalement FROM signalement WHERE id = $1', [id]
+      );
+      if (sigInfo.rows.length > 0) {
+        const surface = sigInfo.rows[0].surface_m2 || 0;
+        const dateSignalement = sigInfo.rows[0].date_signalement || new Date().toISOString().split('T')[0];
+        
+        // Chercher le prix_m2 applicable selon la date du signalement
+        const prixResult = await pool.query(
+          `SELECT prix FROM config_prix_m2
+           WHERE date_debut <= $1
+           ORDER BY date_debut DESC
+           LIMIT 1`,
+          [dateSignalement]
+        );
+        if (prixResult.rows.length > 0) {
+          const prix_m2 = parseFloat(prixResult.rows[0].prix);
+          computedBudget = prix_m2 * parseInt(type_reparation) * surface;
+        }
+      }
+    }
+
     // Déterminer le pourcentage d'avancement selon le statut
     let pourcentage_completion = null;
     let newStatutCode = null;
@@ -265,7 +291,7 @@ router.put('/:id', authenticateToken, requireManager, async (req, res) => {
           type_reparation = COALESCE($9, type_reparation)
       WHERE id = $8
       RETURNING *
-    `, [titre, description, surface_m2, budget, id_statut_signalement, id_entreprise, pourcentage_completion, id, type_reparation]);
+    `, [titre, description, surface_m2, computedBudget, id_statut_signalement, id_entreprise, pourcentage_completion, id, type_reparation]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Signalement non trouvé' });
@@ -330,6 +356,31 @@ router.delete('/:id', authenticateToken, requireManager, async (req, res) => {
 // ============================================
 // ROUTES DE CONFIGURATION (Publiques en lecture)
 // ============================================
+
+// GET - Récupérer le prix au m² applicable pour une date donnée
+router.get('/config/prix-m2', async (req, res) => {
+  try {
+    const { date } = req.query; // format YYYY-MM-DD
+    let queryDate = date || new Date().toISOString().split('T')[0];
+    
+    const result = await pool.query(
+      `SELECT prix FROM config_prix_m2
+       WHERE date_debut <= $1
+       ORDER BY date_debut DESC
+       LIMIT 1`,
+      [queryDate]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Aucun prix configuré pour cette date' });
+    }
+    
+    res.json({ prix_m2: parseFloat(result.rows[0].prix), date_reference: queryDate });
+  } catch (err) {
+    console.error('Erreur récupération prix m²:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // GET - Récupérer tous les statuts disponibles (public)
 router.get('/config/statuts', async (req, res) => {
